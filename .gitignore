@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+server/.venv/
+server/.env
+
+# Node
+node_modules/
+.expo/
+dist/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
