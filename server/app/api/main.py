@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from ETL.db.db_conection import client
+from app.core.database import client
 
 app = FastAPI(
     title="Public Procurement API",
