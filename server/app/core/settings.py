@@ -1,0 +1,1 @@
+PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta"
