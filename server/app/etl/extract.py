@@ -10,7 +10,7 @@ class Extract():
             response = requests.get(PNCP_BASE_URL, params=params)
             response.raise_for_status()
             print("Dados extraídos da API com sucesso.")
-            return response.json() # retorna o output da api
+            return response.json() 
         except requests.exceptions.HTTPError as errHttp:
             print("HTTP Error")
             print(errHttp.args[0])

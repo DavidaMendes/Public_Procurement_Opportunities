@@ -4,14 +4,12 @@ class Load():
     def __init__(self):
         pass
 
-    def insert_data(self, api_response: dict, db_name: str, table_name: str):
+    def insert_data(self, api_response: list, db_name: str, table_name: str):
         database = client[db_name]
         collection = database[table_name]
 
-        procurements_list = api_response.get("data", [])
-
-        if procurements_list and isinstance(procurements_list, list):
-            collection.insert_many(procurements_list)
-            print(f"{len(procurements_list)} documentos inseridos com sucesso.")
+        if api_response and isinstance(api_response, list):
+            collection.insert_many(api_response)
+            print(f"{len(api_response)} documentos inseridos com sucesso.")
         else:
             print("Nenhum dado válido para inserir")
