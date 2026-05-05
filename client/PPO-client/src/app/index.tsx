@@ -1,17 +1,39 @@
-import { Text, View, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import { Redirect } from "expo-router";
+
+import { Screen } from "@/components/ui/Screen";
+import { onboardingPreferences } from "@/services/preferences/onboardingPreferences";
 
 export default function Index() {
-  return (
-    <View style={styles.container}>
-      <Text>Edit src/app/index.tsx to edit this screen.</Text>
-    </View>
-  );
-}
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOnboardingPreference() {
+      try {
+        const completed = await onboardingPreferences.getCompleted();
+
+        if (isMounted) {
+          setHasCompletedOnboarding(completed);
+        }
+      } catch {
+        if (isMounted) {
+          setHasCompletedOnboarding(false);
+        }
+      }
+    }
+
+    loadOnboardingPreference();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (hasCompletedOnboarding === null) {
+    return <Screen scroll={false} />;
+  }
+
+  return <Redirect href={hasCompletedOnboarding ? "/(auth)/login" : "/onboarding"} />;
+}
