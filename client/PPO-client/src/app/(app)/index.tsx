@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
+import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/services/api/client";
 import { listContratacoes } from "@/services/contratacoes/contratacaoService";
@@ -156,7 +157,9 @@ export default function AppHomeScreen() {
                             <Text style={styles.itemText}>{item.organization}</Text>
                             <View style={styles.itemMeta}>
                                 <Text style={styles.itemMetaText}>{item.estimatedValue}</Text>
-                                <Text style={styles.itemMetaText}>{item.deadline}</Text>
+                                <Text style={styles.itemMetaText}>
+                                    {formatDate(item.deadline, "Prazo nao informado")}
+                                </Text>
                             </View>
                         </View>
                     )}
