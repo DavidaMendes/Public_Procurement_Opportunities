@@ -8,6 +8,7 @@ server/.env
 node_modules/
 .expo/
 dist/
+client/PPO-client/.env
 
 # OS / IDE
 .DS_Store
