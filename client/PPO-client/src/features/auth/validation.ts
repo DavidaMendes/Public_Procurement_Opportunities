@@ -5,7 +5,7 @@ export const loginSchema = z.object({
     .string()
     .trim()
     .min(1, "Informe seu e-mail.")
-    .email("Informe um e-mail válido."),
+    .email("Informe um e-mail valido."),
   password: z.string().min(1, "Informe sua senha."),
 });
 
@@ -18,18 +18,18 @@ export const registerSchema = z
       .string()
       .trim()
       .min(1, "Informe seu e-mail.")
-      .email("Informe um e-mail válido."),
+      .email("Informe um e-mail valido."),
     password: z.string().min(6, "Use pelo menos 6 caracteres."),
     passwordConfirmation: z.string().min(1, "Confirme sua senha."),
     companyIdentifier: z
       .string()
       .trim()
-      .refine((value) => value.length === 0 || value.length >= 4, {
-        message: "Informe um CNPJ ou CNAE válido.",
-      }),
+      .min(1, "Informe seu CNPJ.")
+      .regex(/^\d+$/, "CNPJ deve conter apenas numeros.")
+      .length(14, "CNPJ deve ter 14 digitos."),
   })
   .refine((data) => data.passwordConfirmation === data.password, {
-    message: "As senhas não conferem.",
+    message: "As senhas nao conferem.",
     path: ["passwordConfirmation"],
   });
 

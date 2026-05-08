@@ -9,12 +9,13 @@ import { FormError } from "@/components/ui/FormError";
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
 import { LoginFormData, loginSchema } from "@/features/auth/validation";
-import { login } from "@/services/auth/authService";
 import { theme } from "@/theme";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginScreen() {
   const router = useRouter();
   const [formError, setFormError] = useState("");
+  const { signIn } = useAuth();
 
   const {
     control,
@@ -31,14 +32,19 @@ export default function LoginScreen() {
   const onSubmit: SubmitHandler<LoginFormData> = async (data) => {
     try {
       setFormError("");
-      await login({
+      await signIn({
         email: data.email.trim().toLowerCase(),
-        password: data.password,
+        senha: data.password,
       });
-    } catch {
-      setFormError(
-        "precisa da integração com a API",
-      );
+      router.replace("/(app)");
+
+    } catch (error) {
+      if (error instanceof Error) {
+        setFormError(error.message);
+        return;
+      }
+
+      setFormError("Nao foi possivel entrar.");
     }
   };
 

@@ -35,15 +35,20 @@ export default function RegisterScreen() {
     try {
       setFormError("");
       await register({
-        name: data.name.trim(),
+        nome: data.name.trim(),
         email: data.email.trim().toLowerCase(),
-        password: data.password,
-        companyIdentifier: data.companyIdentifier.trim() || undefined,
+        senha: data.password,
+        cnpj: data.companyIdentifier.trim(),
       });
-    } catch {
-      setFormError(
-        "O cadastro está preparado na interface, mas a API própria ainda precisa ser configurada.",
-      );
+      router.replace("/(auth)/login");
+
+    } catch (error) {
+      if (error instanceof Error) {
+        setFormError(error.message);
+        return;
+      }
+
+      setFormError("Nao foi possivel se cadastrar.");
     }
   };
 
@@ -131,10 +136,11 @@ export default function RegisterScreen() {
               <TextField
                 autoCapitalize="characters"
                 error={errors.companyIdentifier?.message}
-                label="CNPJ ou CNAE (opcional)"
+                keyboardType="number-pad"
+                label="CNPJ"
                 onBlur={onBlur}
                 onChangeText={onChange}
-                placeholder="Ex.: 12.345.678/0001-90"
+                placeholder="12345678000195"
                 value={value}
               />
             )}
