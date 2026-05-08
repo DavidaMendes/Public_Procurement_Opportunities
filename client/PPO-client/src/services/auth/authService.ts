@@ -1,35 +1,15 @@
 import { apiRequest } from "@/services/api/client";
+import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse } from "@/types/auth";
 
-export type LoginInput = {
-  email: string;
-  password: string;
-};
-
-export type RegisterInput = {
-  name: string;
-  email: string;
-  password: string;
-  companyIdentifier?: string;
-};
-
-export type AuthResponse = {
-  accessToken: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-};
-
-export function login(input: LoginInput) {
-  return apiRequest<AuthResponse>("/auth/login", {
+export function login(input: LoginRequest) {
+  return apiRequest<LoginResponse>("/auth/login", {
     method: "POST",
     body: input,
   });
 }
 
-export function register(input: RegisterInput) {
-  return apiRequest<AuthResponse>("/auth/register", {
+export function register(input: RegisterRequest) {
+  return apiRequest<RegisterResponse>("/auth/register", {
     method: "POST",
     body: input,
   });
