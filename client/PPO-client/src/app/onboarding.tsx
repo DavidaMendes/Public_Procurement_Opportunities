@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
-import { onboardingPreferences } from "@/services/preferences/onboardingPreferences";
 import { theme } from "@/theme";
 
 const slides = [
@@ -41,7 +40,6 @@ export default function OnboardingScreen() {
   );
 
   async function goToAuth() {
-    await onboardingPreferences.setCompleted(true);
     router.replace("/(auth)/login");
   }
 
@@ -87,7 +85,6 @@ export default function OnboardingScreen() {
             <Button
               title="Criar conta"
               onPress={async () => {
-                await onboardingPreferences.setCompleted(true);
                 router.push("/(auth)/register");
               }}
               variant="secondary"
