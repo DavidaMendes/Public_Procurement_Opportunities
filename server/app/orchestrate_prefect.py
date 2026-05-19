@@ -7,12 +7,16 @@ from app.core.settings import RECIFE_PROCUREMENT
 from app.etl.extract import Extract
 from app.etl.load import Load
 from app.etl.transform import Transform
+from app.core.exceptions import NonRetryableAPIError
 
 
 load_dotenv()
 
 
-@task(name="Extract procurements", retries=3, retry_delay_seconds=10)
+@task(name="Extract procurements", 
+      retries=3, retry_delay_seconds=10, 
+      retry_condition_fn=lambda task, exc: not isinstance(exc, NonRetryableAPIError)
+      )
 def extract_procurements(params: dict) -> dict:
     logger = get_run_logger()
     logger.info("Iniciando extração dos dados da API PNCP.")
