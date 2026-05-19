@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
@@ -35,7 +35,6 @@ export default function AppHomeScreen() {
             try {
                 setError("");
                 const response = await listContratacoes({ page: pageToLoad, token });
-                console.log(response);
 
                 if (mode === "replace") {
                     setItems(response.data);
@@ -152,7 +151,16 @@ export default function AppHomeScreen() {
                     onEndReached={loadNextPage}
                     onEndReachedThreshold={0.35}
                     renderItem={({ item }) => (
-                        <View style={styles.item}>
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={() => {
+                                router.push({
+                                    pathname: "/(app)/contratacoes/[id]",
+                                    params: { id: item.id },
+                                });
+                            }}
+                            style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+                        >
                             <Text style={styles.itemTitle}>{item.title}</Text>
                             <Text style={styles.itemText}>{item.organization}</Text>
                             <View style={styles.itemMeta}>
@@ -161,7 +169,8 @@ export default function AppHomeScreen() {
                                     {formatDate(item.deadline, "Prazo nao informado")}
                                 </Text>
                             </View>
-                        </View>
+                            <Text style={styles.itemAction}>Ver detalhes</Text>
+                        </Pressable>
                     )}
                 />
             </View>
@@ -225,6 +234,9 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         padding: theme.spacing.lg,
     },
+    itemPressed: {
+        opacity: 0.82,
+    },
     itemTitle: {
         color: theme.colors.text,
         fontSize: theme.typography.body,
@@ -245,5 +257,10 @@ const styles = StyleSheet.create({
         color: theme.colors.primaryDark,
         fontSize: theme.typography.small,
         fontWeight: "700",
+    },
+    itemAction: {
+        color: theme.colors.primary,
+        fontSize: theme.typography.small,
+        fontWeight: "800",
     },
 });

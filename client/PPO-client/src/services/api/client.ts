@@ -12,9 +12,9 @@ type ExpoExtra = {
 
 type ApiErrorResponse = {
   error?: string;
-  errors?: Array<{
+  errors?: {
     msg?: string;
-  }>;
+  }[];
 };
 
 const expoExtra = Constants.expoConfig?.extra as ExpoExtra | undefined;
