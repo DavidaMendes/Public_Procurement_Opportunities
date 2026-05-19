@@ -15,26 +15,26 @@ load_dotenv()
 @task(name="Extract procurements", retries=3, retry_delay_seconds=10)
 def extract_procurements(params: dict) -> dict:
     logger = get_run_logger()
-    logger.info("Iniciando extracao dos dados da API PNCP.")
+    logger.info("Iniciando extração dos dados da API PNCP.")
 
     data = Extract().extract_procurements(params)
     if not data:
         raise ValueError("Nenhum dado foi retornado pela API.")
 
     total_records = len(data.get("data", []))
-    logger.info("Extracao finalizada com %s registros recebidos.", total_records)
+    logger.info("Extração finalizada com %s registros recebidos.", total_records)
     return data
 
 
 @task(name="Transform procurements")
 def transform_procurements(data: dict) -> list:
     logger = get_run_logger()
-    logger.info("Iniciando transformacao dos dados.")
+    logger.info("Iniciando transformação dos dados.")
 
     transformed_data = Transform().transform_data(data)
 
     logger.info(
-        "Transformacao finalizada com %s registros aprovados.",
+        "Transformação finalizada com %s registros aprovados.",
         len(transformed_data),
     )
     return transformed_data
@@ -45,9 +45,9 @@ def load_procurements(data: list, database_name: str, collection_name: str) -> i
     logger = get_run_logger()
 
     if not database_name:
-        raise ValueError("A variavel DATABASE_NAME nao foi configurada.")
+        raise ValueError("A variável DATABASE_NAME não foi configurada.")
     if not collection_name:
-        raise ValueError("A variavel COLLECTION_NAME nao foi configurada.")
+        raise ValueError("A variável COLLECTION_NAME não foi configurada.")
 
     if not data:
         logger.info("Nenhum registro para carregar no MongoDB.")
