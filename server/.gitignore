@@ -10,6 +10,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Testing
+
+old-entrypoint.py
+
 # Distribution / packaging
 .Python
 build/

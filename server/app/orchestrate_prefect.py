@@ -100,7 +100,3 @@ def procurement_etl_flow(
 
     logger.info("Pipeline ETL finalizado: %s", result)
     return result
-
-
-if __name__ == "__main__":
-    procurement_etl_flow()
