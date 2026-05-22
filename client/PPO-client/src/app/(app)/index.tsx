@@ -2,24 +2,34 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ContratacaoFiltersForm } from "@/components/contratacoes/ContratacaoFiltersForm";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/services/api/client";
+import {
+    hasContratacaoFilters,
+    initialContratacaoFilters,
+    normalizeContratacaoFilters,
+} from "@/services/contratacoes/contratacaoFilters";
 import { listContratacoes } from "@/services/contratacoes/contratacaoService";
 import { theme } from "@/theme";
-import type { ContratacaoListItem } from "@/types/contratacao";
+import type { ContratacaoFilters, ContratacaoListItem } from "@/types/contratacao";
 
 export default function AppHomeScreen() {
     const router = useRouter();
     const { signOut, token } = useAuth();
     const [items, setItems] = useState<ContratacaoListItem[]>([]);
+    const [filters, setFilters] = useState<ContratacaoFilters>(initialContratacaoFilters);
+    const [appliedFilters, setAppliedFilters] = useState<ContratacaoFilters>(initialContratacaoFilters);
     const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [error, setError] = useState("");
+    const isFiltering = hasContratacaoFilters(appliedFilters);
 
     const handleUnauthorized = useCallback(async () => {
         await signOut();
@@ -34,7 +44,11 @@ export default function AppHomeScreen() {
 
             try {
                 setError("");
-                const response = await listContratacoes({ page: pageToLoad, token });
+                const response = await listContratacoes({
+                    filters: appliedFilters,
+                    page: pageToLoad,
+                    token,
+                });
 
                 if (mode === "replace") {
                     setItems(response.data);
@@ -43,6 +57,7 @@ export default function AppHomeScreen() {
                 }
 
                 setPage(response.page);
+                setTotal(response.total);
                 setTotalPages(response.totalPages);
             } catch (requestError) {
                 if (requestError instanceof ApiError && requestError.status === 401) {
@@ -57,7 +72,7 @@ export default function AppHomeScreen() {
                 );
             }
         },
-        [handleUnauthorized, token],
+        [appliedFilters, handleUnauthorized, token],
     );
 
     useEffect(() => {
@@ -104,6 +119,15 @@ export default function AppHomeScreen() {
         router.replace("/(auth)/login");
     }
 
+    function handleApplyFilters() {
+        setAppliedFilters(normalizeContratacaoFilters(filters));
+    }
+
+    function handleClearFilters() {
+        setFilters(initialContratacaoFilters);
+        setAppliedFilters(initialContratacaoFilters);
+    }
+
     return (
         <Screen scroll={false}>
             <View style={styles.container}>
@@ -117,10 +141,19 @@ export default function AppHomeScreen() {
                                 <Text style={styles.kicker}>Area autenticada</Text>
                                 <Text style={styles.title}>Oportunidades</Text>
                                 <Text style={styles.description}>
-                                    {items.length} oportunidades carregadas
+                                    {isFiltering
+                                        ? `${total} oportunidades encontradas`
+                                        : `${items.length} oportunidades carregadas`}
                                 </Text>
                             </View>
                             <Button title="Sair" onPress={handleSignOut} variant="secondary" />
+                            <ContratacaoFiltersForm
+                                filters={filters}
+                                isFiltering={isFiltering}
+                                onApply={handleApplyFilters}
+                                onChange={setFilters}
+                                onClear={handleClearFilters}
+                            />
                         </View>
                     }
                     ListEmptyComponent={

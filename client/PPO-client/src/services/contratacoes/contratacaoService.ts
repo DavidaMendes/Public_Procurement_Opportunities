@@ -3,6 +3,7 @@ import { mapContratacao, mapContratacaoDetail } from "@/services/contratacoes/co
 import type {
   ContratacaoDetail,
   ContratacaoDetailResponse,
+  ContratacaoFilters,
   ContratacaoListItem,
   ContratacaoListResponse,
 } from "@/types/contratacao";
@@ -10,6 +11,7 @@ import type {
 type ListContratacoesInput = {
   token: string;
   page?: number;
+  filters?: ContratacaoFilters;
 };
 
 type ListContratacoesOutput = Omit<ContratacaoListResponse, "data"> & {
@@ -21,15 +23,38 @@ type GetContratacaoInput = {
   token: string;
 };
 
+function buildContratacoesQuery(page: number, filters?: ContratacaoFilters) {
+  const params = new URLSearchParams({
+    page: String(page),
+  });
+
+  Object.entries(filters ?? {}).forEach(([key, value]) => {
+    const normalizedValue = value?.trim();
+
+    if (normalizedValue) {
+      params.set(key, normalizedValue);
+    }
+  });
+
+  return params.toString();
+}
+
 export async function listContratacoes({
+  filters,
   token,
   page = 1,
 }: ListContratacoesInput): Promise<ListContratacoesOutput> {
-  const response = await apiRequest<ContratacaoListResponse>(`/contratacoes?page=${page}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const query = buildContratacoesQuery(page, filters);
+  const response = await apiRequest<ContratacaoListResponse>(
+    `/contratacoes?${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
+
+  console.log("[contratacoes:list]", response);
 
   return {
     ...response,

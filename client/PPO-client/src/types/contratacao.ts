@@ -48,6 +48,13 @@ export type ContratacaoListItem = {
   deadline: string;
 };
 
+export type ContratacaoFilters = {
+  q?: string;
+  uf?: string;
+  valorMin?: string;
+  valorMax?: string;
+};
+
 export type ContratacaoDetailResponse = {
   data: ContratacaoDetailRaw;
 };
