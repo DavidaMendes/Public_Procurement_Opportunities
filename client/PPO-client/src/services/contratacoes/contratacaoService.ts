@@ -1,80 +1,79 @@
 import { apiRequest } from "@/services/api/client";
+import { mapContratacao, mapContratacaoDetail } from "@/services/contratacoes/contratacaoMappers";
 import type {
+  ContratacaoDetail,
+  ContratacaoDetailResponse,
+  ContratacaoFilters,
   ContratacaoListItem,
   ContratacaoListResponse,
-  ContratacaoRaw,
 } from "@/types/contratacao";
 
 type ListContratacoesInput = {
   token: string;
   page?: number;
+  filters?: ContratacaoFilters;
 };
 
 type ListContratacoesOutput = Omit<ContratacaoListResponse, "data"> & {
   data: ContratacaoListItem[];
 };
 
-function readString(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
+type GetContratacaoInput = {
+  id: string;
+  token: string;
+};
 
-function readNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
+function buildContratacoesQuery(page: number, filters?: ContratacaoFilters) {
+  const params = new URLSearchParams({
+    page: String(page),
+  });
 
-function formatCurrency(value: unknown) {
-  const number = readNumber(value);
+  Object.entries(filters ?? {}).forEach(([key, value]) => {
+    const normalizedValue = value?.trim();
 
-  if (number === null) {
-    return "Nao informado";
-  }
+    if (normalizedValue) {
+      params.set(key, normalizedValue);
+    }
+  });
 
-  return new Intl.NumberFormat("pt-BR", {
-    currency: "BRL",
-    style: "currency",
-  }).format(number);
-}
-
-function mapContratacao(item: ContratacaoRaw, index: number): ContratacaoListItem {
-  const title =
-    readString(item.objetoCompra) ??
-    readString(item.objeto) ??
-    readString(item.descricao) ??
-    "Contratacao sem titulo";
-
-  const organization =
-    readString(item.razaoSocialOrgao) ??
-    readString(item.nomeOrgao) ??
-    readString(item.orgaoEntidade) ??
-    "Orgao nao informado";
-
-  const deadline =
-    readString(item.dataEncerramentoProposta) ??
-    readString(item.dataFinalProposta) ??
-    readString(item.dataFimRecebimentoPropostas) ??
-    "Prazo nao informado";
-
-  return {
-    id: readString(item._id) ?? readString(item.id) ?? `contratacao-${index}`,
-    title,
-    organization,
-    estimatedValue: formatCurrency(item.valorTotalEstimado),
-    deadline,
-  };
+  return params.toString();
 }
 
 export async function listContratacoes({
+  filters,
   token,
   page = 1,
 }: ListContratacoesInput): Promise<ListContratacoesOutput> {
-  const response = await apiRequest<ContratacaoListResponse>(`/contratacoes?page=${page}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const query = buildContratacoesQuery(page, filters);
+  const response = await apiRequest<ContratacaoListResponse>(
+    `/contratacoes?${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
+
+  console.log("[contratacoes:list]", response);
 
   return {
     ...response,
     data: response.data.map(mapContratacao),
   };
+}
+
+export async function getContratacao({
+  id,
+  token,
+}: GetContratacaoInput): Promise<ContratacaoDetail> {
+  const response = await apiRequest<ContratacaoDetailResponse>(
+    `/contratacoes/${encodeURIComponent(id)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  return mapContratacaoDetail(response.data);
 }
