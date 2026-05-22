@@ -1,11 +1,13 @@
 import { useState } from "react";
 import {
   KeyboardTypeOptions,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   TextInputProps,
+  TextStyle,
   View,
 } from "react-native";
 
@@ -24,6 +26,9 @@ type TextFieldProps = {
   textContentType?: TextInputProps["textContentType"];
 };
 
+const webInputStyle =
+  Platform.OS === "web" ? ({ outlineStyle: "none" } as unknown as TextStyle) : undefined;
+
 export function TextField({
   label,
   value,
@@ -37,21 +42,32 @@ export function TextField({
   textContentType,
 }: TextFieldProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const canTogglePassword = secureTextEntry;
 
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.inputWrapper, error && styles.inputWrapperError]}>
+      <View
+        style={[
+          styles.inputWrapper,
+          isFocused && styles.inputWrapperFocused,
+          error && styles.inputWrapperError,
+        ]}
+      >
         <TextInput
           autoCapitalize={autoCapitalize}
           keyboardType={keyboardType}
-          onBlur={onBlur}
+          onBlur={(event) => {
+            setIsFocused(false);
+            onBlur?.(event);
+          }}
           onChangeText={onChangeText}
+          onFocus={() => setIsFocused(true)}
           placeholder={placeholder}
           placeholderTextColor={theme.colors.textMuted}
           secureTextEntry={secureTextEntry && !isPasswordVisible}
-          style={styles.input}
+          style={[styles.input, webInputStyle]}
           textContentType={textContentType}
           value={value}
         />
@@ -92,6 +108,9 @@ const styles = StyleSheet.create({
   },
   inputWrapperError: {
     borderColor: theme.colors.danger,
+  },
+  inputWrapperFocused: {
+    borderColor: theme.colors.focus,
   },
   input: {
     flex: 1,
