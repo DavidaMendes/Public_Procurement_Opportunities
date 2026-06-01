@@ -29,7 +29,7 @@ export const registerSchema = z
       .length(14, "CNPJ deve ter 14 digitos."),
   })
   .refine((data) => data.passwordConfirmation === data.password, {
-    message: "As senhas nao conferem.",
+    message: "As senhas não conferem.",
     path: ["passwordConfirmation"],
   });
 

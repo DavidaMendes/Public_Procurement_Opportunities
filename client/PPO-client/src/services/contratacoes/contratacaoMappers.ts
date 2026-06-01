@@ -12,19 +12,19 @@ export function mapContratacao(item: ContratacaoRaw, index: number): Contratacao
     readString(item.objetoCompra) ??
     readString(item.objeto) ??
     readString(item.descricao) ??
-    "Contratacao sem titulo";
+    "Contratação sem título";
 
   const organization =
     readString(item.razaoSocialOrgao) ??
     readString(item.nomeOrgao) ??
     readString(item.orgaoEntidade) ??
-    "Orgao nao informado";
+    "Órgão não informado";
 
   const deadline =
     readString(item.dataEncerramentoProposta) ??
     readString(item.dataFinalProposta) ??
     readString(item.dataFimRecebimentoPropostas) ??
-    "Prazo nao informado";
+    "Prazo não informado";
 
   return {
     id: readString(item._id) ?? readString(item.id) ?? `contratacao-${index}`,
@@ -43,7 +43,7 @@ export function mapContratacaoDetail(item: ContratacaoDetailResponse["data"]): C
     id: readString(item._id) ?? readString(item.id) ?? "",
     numeroControlePNCP: readString(item.numeroControlePNCP),
     processo: readString(item.processo),
-    objetoCompra: readString(item.objetoCompra) ?? "Contratacao sem titulo",
+    objetoCompra: readString(item.objetoCompra) ?? "Contratação sem título",
     modalidadeNome: readString(item.modalidadeNome),
     valorTotalEstimado: formatCurrency(item.valorTotalEstimado),
     anoCompra: readNumber(item.anoCompra),

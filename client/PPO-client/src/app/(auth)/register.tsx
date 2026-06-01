@@ -48,7 +48,7 @@ export default function RegisterScreen() {
         return;
       }
 
-      setFormError("Nao foi possivel se cadastrar.");
+      setFormError("Não foi possível se cadastrar.");
     }
   };
 

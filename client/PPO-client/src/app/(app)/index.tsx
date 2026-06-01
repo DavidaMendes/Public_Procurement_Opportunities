@@ -68,7 +68,7 @@ export default function AppHomeScreen() {
                 setError(
                     requestError instanceof Error
                         ? requestError.message
-                        : "Nao foi possivel carregar as oportunidades.",
+                        : "Não foi possível carregar as oportunidades.",
                 );
             }
         },
@@ -138,7 +138,7 @@ export default function AppHomeScreen() {
                     ListHeaderComponent={
                         <View style={styles.header}>
                             <View style={styles.headerText}>
-                                <Text style={styles.kicker}>Area autenticada</Text>
+                                <Text style={styles.kicker}>Área autenticada</Text>
                                 <Text style={styles.title}>Oportunidades</Text>
                                 <Text style={styles.description}>
                                     {isFiltering
@@ -199,7 +199,7 @@ export default function AppHomeScreen() {
                             <View style={styles.itemMeta}>
                                 <Text style={styles.itemMetaText}>{item.estimatedValue}</Text>
                                 <Text style={styles.itemMetaText}>
-                                    {formatDate(item.deadline, "Prazo nao informado")}
+                                    {formatDate(item.deadline, "Prazo não informado")}
                                 </Text>
                             </View>
                             <Text style={styles.itemAction}>Ver detalhes</Text>

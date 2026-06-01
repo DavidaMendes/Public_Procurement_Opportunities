@@ -44,7 +44,7 @@ export default function LoginScreen() {
         return;
       }
 
-      setFormError("Nao foi possivel entrar.");
+      setFormError("Não foi possível entrar.");
     }
   };
 

@@ -18,7 +18,7 @@ function buildLocalDate(year: string, month: string, day: string) {
   return date;
 }
 
-export function formatDate(value: string | null | undefined, fallback = "Data nao informada") {
+export function formatDate(value: string | null | undefined, fallback = "Data não informada") {
   if (!value?.trim()) {
     return fallback;
   }

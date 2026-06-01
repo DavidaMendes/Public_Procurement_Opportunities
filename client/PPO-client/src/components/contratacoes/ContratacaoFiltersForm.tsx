@@ -36,7 +36,7 @@ export function ContratacaoFiltersForm({
         autoCapitalize="none"
         label="Buscar"
         onChangeText={(value) => updateFilter("q", value)}
-        placeholder="Objeto da contratacao"
+        placeholder="Objeto da contratação"
         value={filters.q ?? ""}
       />
 
