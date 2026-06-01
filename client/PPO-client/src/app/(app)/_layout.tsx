@@ -1,7 +1,6 @@
 import { Redirect, Stack } from "expo-router";
-import { Text } from "react-native";
 
-import { Screen } from "@/components/ui/Screen";
+import { SessionLoading } from "@/components/ui/SessionLoading";
 import { useAuth } from "@/hooks/useAuth";
 import { theme } from "@/theme";
 
@@ -9,11 +8,7 @@ export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <Screen scroll={false}>
-        <Text style={{ color: theme.colors.textMuted }}>Carregando sessao...</Text>
-      </Screen>
-    );
+    return <SessionLoading />;
   }
 
   if (!isAuthenticated) {

@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
+import { useAuth } from "@/hooks/useAuth";
+import { saveOnboardingCompleted } from "@/services/onboarding/onboardingStorage";
 import { theme } from "@/theme";
 
 const slides = [
@@ -29,6 +31,7 @@ const slides = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   const slide = slides[currentSlideIndex];
@@ -40,7 +43,13 @@ export default function OnboardingScreen() {
   );
 
   async function goToAuth() {
-    router.replace("/(auth)/login");
+    await saveOnboardingCompleted();
+    router.replace(isAuthenticated ? "/(app)" : "/(auth)/login");
+  }
+
+  async function goToRegister() {
+    await saveOnboardingCompleted();
+    router.push("/(auth)/register");
   }
 
   function handleNext() {
@@ -82,13 +91,7 @@ export default function OnboardingScreen() {
 
           <View style={styles.actions}>
             <Button title={isLastSlide ? "Começar" : "Avançar"} onPress={handleNext} />
-            <Button
-              title="Criar conta"
-              onPress={async () => {
-                router.push("/(auth)/register");
-              }}
-              variant="secondary"
-            />
+            <Button title="Criar conta" onPress={goToRegister} variant="secondary" />
           </View>
         </View>
       </View>
