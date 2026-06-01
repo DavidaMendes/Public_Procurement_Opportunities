@@ -2,14 +2,55 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { ContratacaoChecklist } from "@/components/contratacoes/ContratacaoChecklist";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/services/api/client";
+import { getChecklistState, saveChecklistState } from "@/services/checklist/checklistStorage";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
 import { theme } from "@/theme";
+import type { ChecklistItem, StoredChecklist } from "@/types/checklist";
 import type { ContratacaoDetail } from "@/types/contratacao";
+
+const checklistTemplate = [
+  {
+    id: "habilitacao-juridica",
+    label: "Habilitação jurídica",
+    description: "Confira CNPJ, registro empresarial e documentos que comprovam a existência legal do MEI.",
+  },
+  {
+    id: "regularidade-fiscal",
+    label: "Regularidade fiscal",
+    description: "Verifique certidões, tributos e pendências fiscais antes de preparar a proposta.",
+  },
+  {
+    id: "regularidade-trabalhista",
+    label: "Regularidade trabalhista",
+    description: "Confira comprovações trabalhistas exigidas, como certidões e ausência de débitos aplicáveis.",
+  },
+  {
+    id: "qualificacao-tecnica",
+    label: "Qualificação técnica",
+    description: "Avalie se há exigência de atestados, experiência anterior ou capacidade técnica compatível.",
+  },
+  {
+    id: "qualificacao-economico-financeira",
+    label: "Qualificação econômico-financeira",
+    description: "Verifique se o edital exige balanços, declarações ou comprovação financeira específica.",
+  },
+  {
+    id: "proposta-comercial",
+    label: "Proposta comercial",
+    description: "Monte preço, prazo e condições de entrega de acordo com o edital.",
+  },
+  {
+    id: "prazos-envio",
+    label: "Prazos e forma de envio",
+    description: "Revise data limite, local de envio, formato da proposta e demais instruções de participação.",
+  },
+] as const;
 
 function getParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -43,8 +84,16 @@ export default function ContratacaoDetailScreen() {
   const id = getParamValue(params.id);
   const { signOut, token } = useAuth();
   const [contratacao, setContratacao] = useState<ContratacaoDetail | null>(null);
+  const [checklistState, setChecklistState] = useState<StoredChecklist>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isChecklistLoading, setIsChecklistLoading] = useState(true);
   const [error, setError] = useState("");
+  const checklistItems: ChecklistItem[] = checklistTemplate.map((item) => ({
+    ...item,
+    completed: !!checklistState[item.id],
+  }));
+  const completedChecklistItems = checklistItems.filter((item) => item.completed).length;
+  const checklistProgress = Math.round((completedChecklistItems / checklistItems.length) * 100);
 
   const handleUnauthorized = useCallback(async () => {
     await signOut();
@@ -83,6 +132,50 @@ export default function ContratacaoDetailScreen() {
     loadContratacao();
   }, [loadContratacao]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadChecklist() {
+      if (!id) {
+        setIsChecklistLoading(false);
+        return;
+      }
+
+      try {
+        setIsChecklistLoading(true);
+        const storedState = await getChecklistState(id);
+
+        if (isMounted) {
+          setChecklistState(storedState);
+        }
+      } finally {
+        if (isMounted) {
+          setIsChecklistLoading(false);
+        }
+      }
+    }
+
+    loadChecklist();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  async function handleToggleChecklistItem(itemId: string) {
+    if (!id) {
+      return;
+    }
+
+    const nextState = {
+      ...checklistState,
+      [itemId]: !checklistState[itemId],
+    };
+
+    setChecklistState(nextState);
+    await saveChecklistState(id, nextState);
+  }
+
   return (
     <Screen>
       <View style={styles.container}>
@@ -115,6 +208,16 @@ export default function ContratacaoDetailScreen() {
               <DetailRow label="Ano da compra" value={contratacao.anoCompra} />
               <DetailRow label="Controle PNCP" value={contratacao.numeroControlePNCP} />
             </View>
+
+            {isChecklistLoading ? (
+              <Text style={styles.stateText}>Carregando checklist...</Text>
+            ) : (
+              <ContratacaoChecklist
+                items={checklistItems}
+                progress={checklistProgress}
+                onToggleItem={handleToggleChecklistItem}
+              />
+            )}
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Órgão</Text>
