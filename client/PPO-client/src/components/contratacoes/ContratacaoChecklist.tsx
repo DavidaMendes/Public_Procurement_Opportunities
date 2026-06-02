@@ -1,12 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { theme } from "@/theme";
-import type { ChecklistItem } from "@/types/checklist";
+import type { ChecklistItem, ChecklistKey } from "@/types/checklist";
 
 type ContratacaoChecklistProps = {
   items: ChecklistItem[];
   progress: number;
-  onToggleItem: (itemId: string) => void;
+  onToggleItem: (key: ChecklistKey) => void;
 };
 
 export function ContratacaoChecklist({
@@ -37,8 +37,8 @@ export function ContratacaoChecklist({
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: item.completed }}
-            key={item.id}
-            onPress={() => onToggleItem(item.id)}
+            key={item.key}
+            onPress={() => onToggleItem(item.key)}
             style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
           >
             <View style={[styles.checkbox, item.completed && styles.checkboxChecked]}>
