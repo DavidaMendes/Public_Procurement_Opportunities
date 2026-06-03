@@ -1,34 +1,72 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen } from "@/components/ui/Screen";
+import { formatDate } from "@/helpers/formatDate";
+import { useSavedOpportunities } from "@/hooks/useSavedOpportunities";
 import { theme } from "@/theme";
 
-const metrics = [
-  { label: "Oportunidades", value: "Ativas" },
-  { label: "Checklists", value: "Manual" },
-  { label: "Documentos", value: "Pendente" },
-  { label: "Alertas", value: "Base" },
-];
-
 export default function DashboardScreen() {
+  const router = useRouter();
+  const { isLoading, items } = useSavedOpportunities();
+
   return (
     <Screen>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.kicker}>Resumo</Text>
+          <Text style={styles.kicker}>Acompanhamento</Text>
           <Text style={styles.title}>Dashboard</Text>
           <Text style={styles.description}>
-            Visão geral para acompanhar preparação, documentos e oportunidades.
+            Retome editais salvos e acompanhe oportunidades escolhidas para análise.
           </Text>
         </View>
 
-        <View style={styles.grid}>
-          {metrics.map((metric) => (
-            <View key={metric.label} style={styles.metric}>
-              <Text style={styles.metricValue}>{metric.value}</Text>
-              <Text style={styles.metricLabel}>{metric.label}</Text>
+        <View style={styles.summary}>
+          <Text style={styles.summaryValue}>{items.length}</Text>
+          <Text style={styles.summaryLabel}>
+            {items.length === 1 ? "edital salvo" : "editais salvos"}
+          </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Editais salvos</Text>
+
+          {isLoading ? <Text style={styles.stateText}>Carregando editais salvos...</Text> : null}
+
+          {!isLoading && items.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Nenhum edital salvo</Text>
+              <Text style={styles.emptyText}>
+                Abra uma contratação e toque em Salvar edital para acompanhá-la aqui.
+              </Text>
             </View>
-          ))}
+          ) : null}
+
+          {!isLoading && items.length > 0 ? (
+            <View style={styles.savedList}>
+              {items.map((item) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={item.id}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/(app)/contratacoes/[id]",
+                      params: { id: item.id },
+                    });
+                  }}
+                  style={({ pressed }) => [styles.savedItem, pressed && styles.savedItemPressed]}
+                >
+                  <Text style={styles.savedTitle}>{item.title}</Text>
+                  <Text style={styles.savedText}>{item.organization}</Text>
+                  <View style={styles.savedMeta}>
+                    <Text style={styles.savedMetaText}>{item.estimatedValue}</Text>
+                    <Text style={styles.savedMetaText}>{item.location}</Text>
+                    <Text style={styles.savedMetaText}>Salvo em {formatDate(item.savedAt)}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
     </Screen>
@@ -58,14 +96,40 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     lineHeight: 24,
   },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  summary: {
+    alignSelf: "flex-start",
+    minWidth: 148,
+    gap: theme.spacing.xs,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.lg,
+  },
+  summaryValue: {
+    color: theme.colors.primaryDark,
+    fontSize: theme.typography.subtitle,
+    fontWeight: "800",
+  },
+  summaryLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
+  },
+  section: {
     gap: theme.spacing.md,
   },
-  metric: {
-    minWidth: 140,
-    flex: 1,
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    fontWeight: "800",
+  },
+  stateText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.body,
+    lineHeight: 24,
+  },
+  emptyCard: {
     gap: theme.spacing.sm,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
@@ -73,13 +137,48 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.lg,
   },
-  metricValue: {
-    color: theme.colors.primaryDark,
-    fontSize: theme.typography.subtitle,
+  emptyTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
     fontWeight: "800",
   },
-  metricLabel: {
+  emptyText: {
     color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    lineHeight: 20,
+  },
+  savedList: {
+    gap: theme.spacing.md,
+  },
+  savedItem: {
+    gap: theme.spacing.sm,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.lg,
+  },
+  savedItemPressed: {
+    opacity: 0.82,
+  },
+  savedTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    fontWeight: "800",
+    lineHeight: 22,
+  },
+  savedText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    lineHeight: 20,
+  },
+  savedMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.md,
+  },
+  savedMetaText: {
+    color: theme.colors.primaryDark,
     fontSize: theme.typography.small,
     fontWeight: "700",
   },

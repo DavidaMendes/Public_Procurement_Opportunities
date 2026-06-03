@@ -10,6 +10,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
+import {
+  isOpportunitySaved,
+  removeSavedOpportunity,
+  saveOpportunity,
+} from "@/services/saved-opportunities/savedOpportunityService";
 import { theme } from "@/theme";
 import type { ContratacaoDetail } from "@/types/contratacao";
 
@@ -23,6 +28,17 @@ function formatText(value: string | number | null | undefined, fallback = "Não 
   }
 
   return value?.trim() ? value : fallback;
+}
+
+function getLocation(contratacao: ContratacaoDetail) {
+  const city = contratacao.unidadeOrgao.municipioNome;
+  const uf = contratacao.unidadeOrgao.ufSigla;
+
+  if (city && uf) {
+    return `${city}/${uf}`;
+  }
+
+  return city ?? uf ?? "Local não informado";
 }
 
 type DetailRowProps = {
@@ -46,6 +62,8 @@ export default function ContratacaoDetailScreen() {
   const { signOut, token } = useAuth();
   const [contratacao, setContratacao] = useState<ContratacaoDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
   const handleUnauthorized = useCallback(async () => {
@@ -78,6 +96,7 @@ export default function ContratacaoDetailScreen() {
       setError("");
       const response = await getContratacao({ id, token });
       setContratacao(response);
+      setIsSaved(await isOpportunitySaved(response.id));
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
         await handleUnauthorized();
@@ -97,6 +116,33 @@ export default function ContratacaoDetailScreen() {
   useEffect(() => {
     loadContratacao();
   }, [loadContratacao]);
+
+  async function handleToggleSaved() {
+    if (!contratacao) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      if (isSaved) {
+        await removeSavedOpportunity(contratacao.id);
+        setIsSaved(false);
+        return;
+      }
+
+      await saveOpportunity({
+        id: contratacao.id,
+        title: contratacao.objetoCompra,
+        organization: contratacao.orgaoEntidade.razaoSocial ?? "Órgão não informado",
+        estimatedValue: contratacao.valorTotalEstimado,
+        location: getLocation(contratacao),
+      });
+      setIsSaved(true);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <Screen>
@@ -120,6 +166,12 @@ export default function ContratacaoDetailScreen() {
               <Text style={styles.description}>
                 {formatText(contratacao.orgaoEntidade.razaoSocial)}
               </Text>
+              <Button
+                title={isSaved ? "Remover dos salvos" : "Salvar edital"}
+                loading={isSaving}
+                onPress={handleToggleSaved}
+                variant={isSaved ? "secondary" : "primary"}
+              />
             </View>
 
             <View style={styles.card}>
@@ -195,7 +247,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   header: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   kicker: {
     color: theme.colors.primary,
