@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { ContratacaoChecklist } from "@/components/contratacoes/ContratacaoChecklist";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
+import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
 import { theme } from "@/theme";
@@ -50,6 +52,19 @@ export default function ContratacaoDetailScreen() {
     await signOut();
     router.replace("/(auth)/login");
   }, [router, signOut]);
+
+  const {
+    error: checklistError,
+    isLoading: isChecklistLoading,
+    items: checklistItems,
+    progress: checklistProgress,
+    retry: retryChecklist,
+    toggleItem: toggleChecklistItem,
+  } = useContratacaoChecklist({
+    contratacaoId: id,
+    onUnauthorized: handleUnauthorized,
+    token,
+  });
 
   const loadContratacao = useCallback(async () => {
     if (!token || !id) {
@@ -115,6 +130,24 @@ export default function ContratacaoDetailScreen() {
               <DetailRow label="Ano da compra" value={contratacao.anoCompra} />
               <DetailRow label="Controle PNCP" value={contratacao.numeroControlePNCP} />
             </View>
+
+            {isChecklistLoading ? (
+              <Text style={styles.stateText}>Carregando checklist...</Text>
+            ) : (
+              <>
+                <ContratacaoChecklist
+                  items={checklistItems}
+                  progress={checklistProgress}
+                  onToggleItem={toggleChecklistItem}
+                />
+                {checklistError ? (
+                  <View style={styles.stateContainer}>
+                    <Text style={styles.errorText}>{checklistError}</Text>
+                    <Button title="Recarregar checklist" onPress={retryChecklist} variant="secondary" />
+                  </View>
+                ) : null}
+              </>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Órgão</Text>
