@@ -36,7 +36,7 @@ export function ContratacaoFiltersForm({
         autoCapitalize="none"
         label="Buscar"
         onChangeText={(value) => updateFilter("q", value)}
-        placeholder="Objeto da contratacao"
+        placeholder="Objeto da contratação"
         value={filters.q ?? ""}
       />
 
@@ -89,15 +89,20 @@ const styles = StyleSheet.create({
   },
   compactRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.md,
   },
   ufField: {
-    flex: 0.75,
+    flexBasis: 84,
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 84,
   },
   valueField: {
-    flex: 1.25,
-    minWidth: 0,
+    flexBasis: 150,
+    flexGrow: 2,
+    flexShrink: 1,
+    minWidth: 130,
   },
   actions: {
     gap: theme.spacing.md,

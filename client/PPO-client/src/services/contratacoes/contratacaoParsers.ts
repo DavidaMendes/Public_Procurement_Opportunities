@@ -10,7 +10,7 @@ export function formatCurrency(value: unknown) {
   const number = readNumber(value);
 
   if (number === null) {
-    return "Nao informado";
+    return "Não informado";
   }
 
   return new Intl.NumberFormat("pt-BR", {

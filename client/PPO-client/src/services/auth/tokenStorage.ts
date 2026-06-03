@@ -14,7 +14,7 @@ export async function saveToken(token: string) {
   }
 
   if (!(await SecureStore.isAvailableAsync())) {
-    throw new Error("Armazenamento seguro indisponivel neste dispositivo.");
+    throw new Error("Armazenamento seguro indisponível neste dispositivo.");
   }
 
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);

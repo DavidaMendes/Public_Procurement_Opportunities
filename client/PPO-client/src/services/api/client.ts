@@ -25,7 +25,7 @@ export const apiConfig = {
 
 export class ApiConfigurationError extends Error {
   constructor() {
-    super("A API propria ainda nao foi configurada para o aplicativo.");
+    super("A API própria ainda não foi configurada para o aplicativo.");
     this.name = "ApiConfigurationError";
   }
 }
@@ -61,7 +61,7 @@ function getApiErrorMessage(data: unknown) {
     return firstValidationError;
   }
 
-  return "Nao foi possivel concluir a comunicacao com a API.";
+  return "Não foi possível concluir a comunicação com a API.";
 }
 
 export async function apiRequest<TResponse>(

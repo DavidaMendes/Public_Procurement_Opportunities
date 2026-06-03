@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { ContratacaoChecklist } from "@/components/contratacoes/ContratacaoChecklist";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
+import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
 import { theme } from "@/theme";
@@ -15,7 +17,7 @@ function getParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function formatText(value: string | number | null | undefined, fallback = "Nao informado") {
+function formatText(value: string | number | null | undefined, fallback = "Não informado") {
   if (typeof value === "number") {
     return String(value);
   }
@@ -51,10 +53,23 @@ export default function ContratacaoDetailScreen() {
     router.replace("/(auth)/login");
   }, [router, signOut]);
 
+  const {
+    error: checklistError,
+    isLoading: isChecklistLoading,
+    items: checklistItems,
+    progress: checklistProgress,
+    retry: retryChecklist,
+    toggleItem: toggleChecklistItem,
+  } = useContratacaoChecklist({
+    contratacaoId: id,
+    onUnauthorized: handleUnauthorized,
+    token,
+  });
+
   const loadContratacao = useCallback(async () => {
     if (!token || !id) {
       setIsLoading(false);
-      setError("Contratacao nao informada.");
+      setError("Contratação não informada.");
       return;
     }
 
@@ -72,7 +87,7 @@ export default function ContratacaoDetailScreen() {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Nao foi possivel carregar a contratacao.",
+          : "Não foi possível carregar a contratação.",
       );
     } finally {
       setIsLoading(false);
@@ -88,7 +103,7 @@ export default function ContratacaoDetailScreen() {
       <View style={styles.container}>
         <Button title="Voltar" onPress={() => router.back()} variant="ghost" style={styles.backButton} />
 
-        {isLoading ? <Text style={styles.stateText}>Carregando contratacao...</Text> : null}
+        {isLoading ? <Text style={styles.stateText}>Carregando contratação...</Text> : null}
 
         {!isLoading && error ? (
           <View style={styles.stateContainer}>
@@ -100,7 +115,7 @@ export default function ContratacaoDetailScreen() {
         {!isLoading && !error && contratacao ? (
           <>
             <View style={styles.header}>
-              <Text style={styles.kicker}>Detalhe da contratacao</Text>
+              <Text style={styles.kicker}>Detalhe da contratação</Text>
               <Text style={styles.title}>{contratacao.objetoCompra}</Text>
               <Text style={styles.description}>
                 {formatText(contratacao.orgaoEntidade.razaoSocial)}
@@ -116,9 +131,27 @@ export default function ContratacaoDetailScreen() {
               <DetailRow label="Controle PNCP" value={contratacao.numeroControlePNCP} />
             </View>
 
+            {isChecklistLoading ? (
+              <Text style={styles.stateText}>Carregando checklist...</Text>
+            ) : (
+              <>
+                <ContratacaoChecklist
+                  items={checklistItems}
+                  progress={checklistProgress}
+                  onToggleItem={toggleChecklistItem}
+                />
+                {checklistError ? (
+                  <View style={styles.stateContainer}>
+                    <Text style={styles.errorText}>{checklistError}</Text>
+                    <Button title="Recarregar checklist" onPress={retryChecklist} variant="secondary" />
+                  </View>
+                ) : null}
+              </>
+            )}
+
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Orgao</Text>
-              <DetailRow label="Razao social" value={contratacao.orgaoEntidade.razaoSocial} />
+              <Text style={styles.sectionTitle}>Órgão</Text>
+              <DetailRow label="Razão social" value={contratacao.orgaoEntidade.razaoSocial} />
               <DetailRow label="CNPJ" value={contratacao.orgaoEntidade.cnpj} />
               <DetailRow label="Poder" value={contratacao.orgaoEntidade.poderId} />
               <DetailRow label="Esfera" value={contratacao.orgaoEntidade.esferaId} />
@@ -127,22 +160,22 @@ export default function ContratacaoDetailScreen() {
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Unidade</Text>
               <DetailRow label="Unidade" value={contratacao.unidadeOrgao.nomeUnidade} />
-              <DetailRow label="Municipio" value={contratacao.unidadeOrgao.municipioNome} />
+              <DetailRow label="Município" value={contratacao.unidadeOrgao.municipioNome} />
               <DetailRow label="UF" value={contratacao.unidadeOrgao.ufSigla} />
               <DetailRow label="UF nome" value={contratacao.unidadeOrgao.ufNome} />
-              <DetailRow label="Codigo unidade" value={contratacao.unidadeOrgao.codigoUnidade} />
-              <DetailRow label="Codigo IBGE" value={contratacao.unidadeOrgao.codigoIbge} />
+              <DetailRow label="Código unidade" value={contratacao.unidadeOrgao.codigoUnidade} />
+              <DetailRow label="Código IBGE" value={contratacao.unidadeOrgao.codigoIbge} />
             </View>
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Datas</Text>
               <DetailRow
-                label="Inclusao"
-                value={formatDate(contratacao.dataInclusao, "Nao informado")}
+                label="Inclusão"
+                value={formatDate(contratacao.dataInclusao, "Não informado")}
               />
               <DetailRow
-                label="Publicacao PNCP"
-                value={formatDate(contratacao.dataPublicacaoPncp, "Nao informado")}
+                label="Publicação PNCP"
+                value={formatDate(contratacao.dataPublicacaoPncp, "Não informado")}
               />
             </View>
           </>

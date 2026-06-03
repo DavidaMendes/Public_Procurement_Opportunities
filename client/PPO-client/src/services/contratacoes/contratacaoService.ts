@@ -54,8 +54,6 @@ export async function listContratacoes({
     },
   );
 
-  console.log("[contratacoes:list]", response);
-
   return {
     ...response,
     data: response.data.map(mapContratacao),
