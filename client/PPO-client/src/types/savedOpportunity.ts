@@ -5,4 +5,6 @@ export type SavedOpportunity = {
   estimatedValue: string;
   location: string;
   savedAt: string;
+  alertDate: string | null;
+  alertDone: boolean;
 };

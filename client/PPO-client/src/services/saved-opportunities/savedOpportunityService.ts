@@ -5,7 +5,12 @@ import type { SavedOpportunity } from "@/types/savedOpportunity";
 
 const SAVED_OPPORTUNITIES_KEY = "ppo.saved.opportunities";
 
-type SaveOpportunityInput = Omit<SavedOpportunity, "savedAt">;
+type SaveOpportunityInput = Omit<SavedOpportunity, "savedAt" | "alertDate" | "alertDone"> &
+  Partial<Pick<SavedOpportunity, "alertDate" | "alertDone">>;
+type UpdateSavedOpportunityAlertInput = {
+  alertDate?: string | null;
+  alertDone?: boolean;
+};
 
 function canUseWebStorage() {
   return Platform.OS === "web" && typeof window !== "undefined" && !!window.localStorage;
@@ -31,7 +36,11 @@ function parseSavedOpportunities(value: string | null): SavedOpportunity[] {
       typeof item.estimatedValue === "string" &&
       typeof item.location === "string" &&
       typeof item.savedAt === "string"
-    ));
+    )).map((item) => ({
+      ...item,
+      alertDate: typeof item.alertDate === "string" ? item.alertDate : null,
+      alertDone: typeof item.alertDone === "boolean" ? item.alertDone : false,
+    }));
   } catch {
     return [];
   }
@@ -83,6 +92,8 @@ export async function saveOpportunity(input: SaveOpportunityInput) {
   const nextItems = [
     {
       ...input,
+      alertDate: input.alertDate ?? null,
+      alertDone: input.alertDone ?? false,
       savedAt: new Date().toISOString(),
     },
     ...currentItems,
@@ -95,6 +106,25 @@ export async function saveOpportunity(input: SaveOpportunityInput) {
 export async function removeSavedOpportunity(id: string) {
   const currentItems = await getSavedOpportunities();
   const nextItems = currentItems.filter((item) => item.id !== id);
+
+  await writeSavedOpportunities(nextItems);
+  return nextItems;
+}
+
+export async function updateSavedOpportunityAlert(
+  id: string,
+  input: UpdateSavedOpportunityAlertInput,
+) {
+  const currentItems = await getSavedOpportunities();
+  const nextItems = currentItems.map((item) => (
+    item.id === id
+      ? {
+          ...item,
+          alertDate: input.alertDate !== undefined ? input.alertDate : item.alertDate,
+          alertDone: input.alertDone !== undefined ? input.alertDone : item.alertDone,
+        }
+      : item
+  ));
 
   await writeSavedOpportunities(nextItems);
   return nextItems;
