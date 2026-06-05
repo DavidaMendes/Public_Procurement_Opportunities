@@ -16,21 +16,6 @@ type OpportunityRequestInput = AuthenticatedRequestInput & {
   id: string;
 };
 
-type UpdateSavedOpportunityAlertInput = {
-  alertDate?: string | null;
-  alertDone?: boolean;
-};
-
-type UpdateSavedOpportunityAlertRequestInput = OpportunityRequestInput & {
-  input: UpdateSavedOpportunityAlertInput;
-};
-
-function getAuthorizationHeader(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 function getLocation(item: SavedOpportunityRaw) {
   const unidadeOrgao = item.contratacao?.unidadeOrgao;
   const city = readString(unidadeOrgao?.municipioNome);
@@ -52,9 +37,15 @@ function mapSavedOpportunity(item: SavedOpportunityRaw): SavedOpportunity {
     organization: contratacao?.orgaoEntidade.razaoSocial ?? "Órgão não informado",
     estimatedValue: contratacao?.valorTotalEstimado ?? formatCurrency(null),
     location: getLocation(item),
-    savedAt: item.savedAt,
     alertDate: item.alertDate ?? null,
     alertDone: item.alertDone ?? false,
+    savedAt: item.savedAt,
+  };
+}
+
+function getAuthorizationHeader(token: string) {
+  return {
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -88,21 +79,4 @@ export async function removeSavedOpportunity({ id, token }: OpportunityRequestIn
     method: "DELETE",
     headers: getAuthorizationHeader(token),
   });
-}
-
-export async function updateSavedOpportunityAlert({
-  id,
-  input,
-  token,
-}: UpdateSavedOpportunityAlertRequestInput) {
-  const response = await apiRequest<SavedOpportunityResponse>(
-    `/contratacoes/${encodeURIComponent(id)}/alert`,
-    {
-      method: "PATCH",
-      body: input,
-      headers: getAuthorizationHeader(token),
-    },
-  );
-
-  return mapSavedOpportunity(response.data);
 }

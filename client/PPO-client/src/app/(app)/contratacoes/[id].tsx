@@ -120,7 +120,6 @@ export default function ContratacaoDetailScreen() {
 
       if (isSaved) {
         await removeSavedOpportunity({ id: contratacao.id, token });
-        await cancelAlertNotification(contratacao.id);
         setIsSaved(false);
         return;
       }
