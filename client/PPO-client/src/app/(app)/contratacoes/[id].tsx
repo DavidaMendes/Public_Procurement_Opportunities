@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
+import { cancelAlertNotification } from "@/services/notifications/alertNotificationService";
 import {
   isOpportunitySaved,
   removeSavedOpportunity,
@@ -28,17 +29,6 @@ function formatText(value: string | number | null | undefined, fallback = "Não 
   }
 
   return value?.trim() ? value : fallback;
-}
-
-function getLocation(contratacao: ContratacaoDetail) {
-  const city = contratacao.unidadeOrgao.municipioNome;
-  const uf = contratacao.unidadeOrgao.ufSigla;
-
-  if (city && uf) {
-    return `${city}/${uf}`;
-  }
-
-  return city ?? uf ?? "Local não informado";
 }
 
 type DetailRowProps = {
@@ -65,6 +55,7 @@ export default function ContratacaoDetailScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   const handleUnauthorized = useCallback(async () => {
     await signOut();
@@ -94,9 +85,10 @@ export default function ContratacaoDetailScreen() {
     try {
       setIsLoading(true);
       setError("");
+      setSaveError("");
       const response = await getContratacao({ id, token });
       setContratacao(response);
-      setIsSaved(await isOpportunitySaved(response.id));
+      setIsSaved(await isOpportunitySaved({ id: response.id, token }));
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
         await handleUnauthorized();
@@ -118,27 +110,34 @@ export default function ContratacaoDetailScreen() {
   }, [loadContratacao]);
 
   async function handleToggleSaved() {
-    if (!contratacao) {
+    if (!contratacao || !token) {
       return;
     }
 
     try {
       setIsSaving(true);
+      setSaveError("");
 
       if (isSaved) {
-        await removeSavedOpportunity(contratacao.id);
+        await removeSavedOpportunity({ id: contratacao.id, token });
+        await cancelAlertNotification(contratacao.id);
         setIsSaved(false);
         return;
       }
 
-      await saveOpportunity({
-        id: contratacao.id,
-        title: contratacao.objetoCompra,
-        organization: contratacao.orgaoEntidade.razaoSocial ?? "Órgão não informado",
-        estimatedValue: contratacao.valorTotalEstimado,
-        location: getLocation(contratacao),
-      });
+      await saveOpportunity({ id: contratacao.id, token });
       setIsSaved(true);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      setSaveError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível atualizar os salvos.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -172,6 +171,7 @@ export default function ContratacaoDetailScreen() {
                 onPress={handleToggleSaved}
                 variant={isSaved ? "secondary" : "primary"}
               />
+              {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
             </View>
 
             <View style={styles.card}>

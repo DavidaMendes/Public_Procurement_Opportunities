@@ -1,12 +1,18 @@
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
-import { TextField } from "@/components/ui/TextField";
 import { formatDate } from "@/helpers/formatDate";
+import { useAuth } from "@/hooks/useAuth";
 import { useSavedOpportunities } from "@/hooks/useSavedOpportunities";
+import { ApiError } from "@/services/api/client";
+import {
+  cancelAlertNotification,
+  scheduleAlertNotification,
+} from "@/services/notifications/alertNotificationService";
 import { updateSavedOpportunityAlert } from "@/services/saved-opportunities/savedOpportunityService";
 import { theme } from "@/theme";
 import type { SavedOpportunity } from "@/types/savedOpportunity";
@@ -39,6 +45,18 @@ function getToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return today;
+}
+
+function formatDateOnly(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getPickerDate(value: string) {
+  return parseDateOnly(value) ?? getToday();
 }
 
 function getAlertStatus(item: SavedOpportunity): AlertStatus {
@@ -121,9 +139,12 @@ function sortAlerts(items: SavedOpportunity[]) {
 
 export default function AlertasScreen() {
   const router = useRouter();
-  const { isLoading, items, refresh } = useSavedOpportunities();
+  const { signOut } = useAuth();
+  const { error, isLoading, items, refresh, token } = useSavedOpportunities();
   const [draftDates, setDraftDates] = useState<Record<string, string>>({});
+  const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
   const sortedItems = useMemo(() => sortAlerts(items), [items]);
 
   useEffect(() => {
@@ -141,35 +162,121 @@ export default function AlertasScreen() {
   }, [items]);
 
   async function handleSaveDate(item: SavedOpportunity) {
-    const draftDate = draftDates[item.id]?.trim() ?? "";
-    const normalizedDate = draftDate || null;
+    if (!token) {
+      return;
+    }
 
-    if (normalizedDate && !parseDateOnly(normalizedDate)) {
+    const draftDate = draftDates[item.id]?.trim() ?? "";
+    const normalizedDate = draftDate;
+
+    if (!normalizedDate) {
+      setActionError("Informe um prazo para salvar o alerta.");
+      return;
+    }
+
+    if (!parseDateOnly(normalizedDate)) {
       return;
     }
 
     try {
       setSavingId(item.id);
-      await updateSavedOpportunityAlert(item.id, {
-        alertDate: normalizedDate,
-        alertDone: false,
+      setActionError("");
+      const updatedItem = await updateSavedOpportunityAlert({
+        id: item.id,
+        input: {
+          alertDate: normalizedDate,
+          alertDone: false,
+        },
+        token,
+      });
+      await scheduleAlertNotification({
+        ...item,
+        alertDate: updatedItem.alertDate,
+        alertDone: updatedItem.alertDone,
+        savedAt: updatedItem.savedAt,
       });
       await refresh();
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        await signOut();
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      setActionError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível salvar o alerta.",
+      );
     } finally {
       setSavingId(null);
     }
   }
 
   async function handleToggleDone(item: SavedOpportunity) {
+    if (!token) {
+      return;
+    }
+
     try {
       setSavingId(item.id);
-      await updateSavedOpportunityAlert(item.id, {
-        alertDone: !item.alertDone,
+      setActionError("");
+      const nextAlertDone = !item.alertDone;
+      const updatedItem = await updateSavedOpportunityAlert({
+        id: item.id,
+        input: {
+          alertDate: item.alertDate,
+          alertDone: nextAlertDone,
+        },
+        token,
       });
+
+      if (nextAlertDone) {
+        await cancelAlertNotification(item.id);
+      } else {
+        await scheduleAlertNotification({
+          ...item,
+          alertDate: updatedItem.alertDate,
+          alertDone: updatedItem.alertDone,
+          savedAt: updatedItem.savedAt,
+        });
+      }
+
       await refresh();
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        await signOut();
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      setActionError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível atualizar o status do alerta.",
+      );
     } finally {
       setSavingId(null);
     }
+  }
+
+  function handleDatePickerChange(
+    itemId: string,
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) {
+    if (Platform.OS !== "ios") {
+      setActivePickerId(null);
+    }
+
+    if (event.type !== "set" || !selectedDate) {
+      return;
+    }
+
+    setDraftDates((currentDrafts) => ({
+      ...currentDrafts,
+      [itemId]: formatDateOnly(selectedDate),
+    }));
   }
 
   return (
@@ -185,7 +292,20 @@ export default function AlertasScreen() {
 
         {isLoading ? <Text style={styles.stateText}>Carregando alertas...</Text> : null}
 
-        {!isLoading && sortedItems.length === 0 ? (
+        {!isLoading && error ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Button title="Tentar novamente" onPress={refresh} variant="secondary" />
+          </View>
+        ) : null}
+
+        {!isLoading && actionError ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.errorText}>{actionError}</Text>
+          </View>
+        ) : null}
+
+        {!isLoading && !error && sortedItems.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Nenhum edital salvo</Text>
             <Text style={styles.emptyText}>
@@ -194,12 +314,12 @@ export default function AlertasScreen() {
           </View>
         ) : null}
 
-        {!isLoading && sortedItems.length > 0 ? (
+        {!isLoading && !error && sortedItems.length > 0 ? (
           <View style={styles.list}>
             {sortedItems.map((item) => {
               const status = getAlertStatus(item);
               const draftDate = draftDates[item.id] ?? "";
-              const hasInvalidDate = !!draftDate.trim() && !parseDateOnly(draftDate.trim());
+              const canToggleDone = !!item.alertDate;
 
               return (
                 <View key={item.id} style={styles.item}>
@@ -221,28 +341,59 @@ export default function AlertasScreen() {
                     </Text>
                   </View>
 
-                  <TextField
-                    error={hasInvalidDate ? "Use o formato YYYY-MM-DD." : undefined}
-                    keyboardType="numbers-and-punctuation"
-                    label="Prazo"
-                    onChangeText={(value) => {
-                      setDraftDates((currentDrafts) => ({
-                        ...currentDrafts,
-                        [item.id]: value,
-                      }));
-                    }}
-                    placeholder="2026-06-30"
-                    value={draftDate}
-                  />
+                  <View style={styles.dateField}>
+                    <Text style={styles.dateLabel}>Prazo</Text>
+                    {Platform.OS === "web" ? (
+                      <TextInput
+                        {...({ type: "date" } as object)}
+                        accessibilityLabel="Prazo do alerta"
+                        onChangeText={(value) => {
+                          setDraftDates((currentDrafts) => ({
+                            ...currentDrafts,
+                            [item.id]: value,
+                          }));
+                        }}
+                        style={styles.dateInput}
+                        value={draftDate}
+                      />
+                    ) : (
+                      <>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setActivePickerId(item.id)}
+                          style={({ pressed }) => [
+                            styles.dateInput,
+                            styles.dateButton,
+                            pressed && styles.dateButtonPressed,
+                          ]}
+                        >
+                          <Text style={draftDate ? styles.dateValue : styles.datePlaceholder}>
+                            {draftDate ? formatDate(draftDate) : "Selecionar data"}
+                          </Text>
+                        </Pressable>
+                        {activePickerId === item.id ? (
+                          <DateTimePicker
+                            display={Platform.OS === "ios" ? "inline" : "default"}
+                            minimumDate={getToday()}
+                            mode="date"
+                            onChange={(event, selectedDate) => {
+                              handleDatePickerChange(item.id, event, selectedDate);
+                            }}
+                            value={getPickerDate(draftDate)}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                  </View>
 
                   <View style={styles.actions}>
                     <Button
-                      disabled={hasInvalidDate}
                       loading={savingId === item.id}
                       onPress={() => handleSaveDate(item)}
                       title="Salvar prazo"
                     />
                     <Button
+                      disabled={!canToggleDone}
                       loading={savingId === item.id}
                       onPress={() => handleToggleDone(item)}
                       title={item.alertDone ? "Reabrir" : "Concluir"}
@@ -316,6 +467,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     lineHeight: 20,
   },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
   list: {
     gap: theme.spacing.md,
   },
@@ -378,6 +535,39 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDark,
     fontSize: theme.typography.small,
     fontWeight: "700",
+  },
+  dateField: {
+    gap: theme.spacing.xs,
+  },
+  dateLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
+  },
+  dateInput: {
+    minHeight: 48,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    paddingHorizontal: theme.spacing.md,
+  },
+  dateButton: {
+    justifyContent: "center",
+  },
+  dateButtonPressed: {
+    opacity: 0.82,
+  },
+  dateValue: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body,
+    fontWeight: "700",
+  },
+  datePlaceholder: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.body,
   },
   actions: {
     gap: theme.spacing.md,
