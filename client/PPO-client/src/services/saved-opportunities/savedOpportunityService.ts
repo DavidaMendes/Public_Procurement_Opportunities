@@ -16,6 +16,15 @@ type OpportunityRequestInput = AuthenticatedRequestInput & {
   id: string;
 };
 
+type UpdateSavedOpportunityAlertInput = {
+  alertDate?: string | null;
+  alertDone?: boolean;
+};
+
+type UpdateSavedOpportunityAlertRequestInput = OpportunityRequestInput & {
+  input: UpdateSavedOpportunityAlertInput;
+};
+
 function getLocation(item: SavedOpportunityRaw) {
   const unidadeOrgao = item.contratacao?.unidadeOrgao;
   const city = readString(unidadeOrgao?.municipioNome);
@@ -79,4 +88,21 @@ export async function removeSavedOpportunity({ id, token }: OpportunityRequestIn
     method: "DELETE",
     headers: getAuthorizationHeader(token),
   });
+}
+
+export async function updateSavedOpportunityAlert({
+  id,
+  input,
+  token,
+}: UpdateSavedOpportunityAlertRequestInput) {
+  const response = await apiRequest<SavedOpportunityResponse>(
+    `/contratacoes/${encodeURIComponent(id)}/alert`,
+    {
+      method: "PATCH",
+      body: input,
+      headers: getAuthorizationHeader(token),
+    },
+  );
+
+  return mapSavedOpportunity(response.data);
 }
