@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useSavedOpportunities } from "@/hooks/useSavedOpportunities";
@@ -8,7 +9,7 @@ import { theme } from "@/theme";
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { isLoading, items } = useSavedOpportunities();
+  const { error, isLoading, items, refresh } = useSavedOpportunities();
 
   return (
     <Screen>
@@ -33,7 +34,14 @@ export default function DashboardScreen() {
 
           {isLoading ? <Text style={styles.stateText}>Carregando editais salvos...</Text> : null}
 
-          {!isLoading && items.length === 0 ? (
+          {!isLoading && error ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button title="Tentar novamente" onPress={refresh} variant="secondary" />
+            </View>
+          ) : null}
+
+          {!isLoading && !error && items.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>Nenhum edital salvo</Text>
               <Text style={styles.emptyText}>
@@ -42,7 +50,7 @@ export default function DashboardScreen() {
             </View>
           ) : null}
 
-          {!isLoading && items.length > 0 ? (
+          {!isLoading && !error && items.length > 0 ? (
             <View style={styles.savedList}>
               {items.map((item) => (
                 <Pressable
@@ -145,6 +153,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.small,
+    lineHeight: 20,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
     lineHeight: 20,
   },
   savedList: {

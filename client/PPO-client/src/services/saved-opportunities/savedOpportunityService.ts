@@ -1,101 +1,82 @@
-import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
+import { apiRequest } from "@/services/api/client";
+import { mapContratacaoDetail } from "@/services/contratacoes/contratacaoMappers";
+import { formatCurrency, readString } from "@/services/contratacoes/contratacaoParsers";
+import type {
+  SavedOpportunity,
+  SavedOpportunityListResponse,
+  SavedOpportunityRaw,
+  SavedOpportunityResponse,
+} from "@/types/savedOpportunity";
 
-import type { SavedOpportunity } from "@/types/savedOpportunity";
+type AuthenticatedRequestInput = {
+  token: string;
+};
 
-const SAVED_OPPORTUNITIES_KEY = "ppo.saved.opportunities";
+type OpportunityRequestInput = AuthenticatedRequestInput & {
+  id: string;
+};
 
-type SaveOpportunityInput = Omit<SavedOpportunity, "savedAt">;
+function getLocation(item: SavedOpportunityRaw) {
+  const unidadeOrgao = item.contratacao?.unidadeOrgao;
+  const city = readString(unidadeOrgao?.municipioNome);
+  const uf = readString(unidadeOrgao?.ufSigla);
 
-function canUseWebStorage() {
-  return Platform.OS === "web" && typeof window !== "undefined" && !!window.localStorage;
+  if (city && uf) {
+    return `${city}/${uf}`;
+  }
+
+  return city ?? uf ?? "Local não informado";
 }
 
-function parseSavedOpportunities(value: string | null): SavedOpportunity[] {
-  if (!value) {
-    return [];
-  }
+function mapSavedOpportunity(item: SavedOpportunityRaw): SavedOpportunity {
+  const contratacao = item.contratacao ? mapContratacaoDetail(item.contratacao) : null;
 
-  try {
-    const parsed = JSON.parse(value);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.filter((item): item is SavedOpportunity => (
-      item &&
-      typeof item.id === "string" &&
-      typeof item.title === "string" &&
-      typeof item.organization === "string" &&
-      typeof item.estimatedValue === "string" &&
-      typeof item.location === "string" &&
-      typeof item.savedAt === "string"
-    ));
-  } catch {
-    return [];
-  }
+  return {
+    id: item.contratacaoId,
+    title: contratacao?.objetoCompra ?? "Contratação sem título",
+    organization: contratacao?.orgaoEntidade.razaoSocial ?? "Órgão não informado",
+    estimatedValue: contratacao?.valorTotalEstimado ?? formatCurrency(null),
+    location: getLocation(item),
+    alertDate: item.alertDate ?? null,
+    alertDone: item.alertDone ?? false,
+    savedAt: item.savedAt,
+  };
 }
 
-async function readRawSavedOpportunities() {
-  if (canUseWebStorage()) {
-    return window.localStorage.getItem(SAVED_OPPORTUNITIES_KEY);
-  }
-
-  if (!(await SecureStore.isAvailableAsync())) {
-    return null;
-  }
-
-  return SecureStore.getItemAsync(SAVED_OPPORTUNITIES_KEY);
+function getAuthorizationHeader(token: string) {
+  return {
+    Authorization: `Bearer ${token}`,
+  };
 }
 
-async function writeSavedOpportunities(items: SavedOpportunity[]) {
-  const value = JSON.stringify(items);
+export async function getSavedOpportunities({ token }: AuthenticatedRequestInput) {
+  const response = await apiRequest<SavedOpportunityListResponse>("/me/saved-opportunities", {
+    headers: getAuthorizationHeader(token),
+  });
 
-  if (canUseWebStorage()) {
-    window.localStorage.setItem(SAVED_OPPORTUNITIES_KEY, value);
-    return;
-  }
-
-  if (!(await SecureStore.isAvailableAsync())) {
-    return;
-  }
-
-  await SecureStore.setItemAsync(SAVED_OPPORTUNITIES_KEY, value);
+  return response.data.map(mapSavedOpportunity);
 }
 
-export async function getSavedOpportunities() {
-  return parseSavedOpportunities(await readRawSavedOpportunities());
-}
-
-export async function isOpportunitySaved(id: string) {
-  const savedOpportunities = await getSavedOpportunities();
+export async function isOpportunitySaved({ id, token }: OpportunityRequestInput) {
+  const savedOpportunities = await getSavedOpportunities({ token });
   return savedOpportunities.some((item) => item.id === id);
 }
 
-export async function saveOpportunity(input: SaveOpportunityInput) {
-  const currentItems = await getSavedOpportunities();
-
-  if (currentItems.some((item) => item.id === input.id)) {
-    return currentItems;
-  }
-
-  const nextItems = [
+export async function saveOpportunity({ id, token }: OpportunityRequestInput) {
+  const response = await apiRequest<SavedOpportunityResponse>(
+    `/contratacoes/${encodeURIComponent(id)}/save`,
     {
-      ...input,
-      savedAt: new Date().toISOString(),
+      method: "POST",
+      headers: getAuthorizationHeader(token),
     },
-    ...currentItems,
-  ];
+  );
 
-  await writeSavedOpportunities(nextItems);
-  return nextItems;
+  return mapSavedOpportunity(response.data);
 }
 
-export async function removeSavedOpportunity(id: string) {
-  const currentItems = await getSavedOpportunities();
-  const nextItems = currentItems.filter((item) => item.id !== id);
-
-  await writeSavedOpportunities(nextItems);
-  return nextItems;
+export async function removeSavedOpportunity({ id, token }: OpportunityRequestInput) {
+  await apiRequest<null>(`/contratacoes/${encodeURIComponent(id)}/save`, {
+    method: "DELETE",
+    headers: getAuthorizationHeader(token),
+  });
 }
