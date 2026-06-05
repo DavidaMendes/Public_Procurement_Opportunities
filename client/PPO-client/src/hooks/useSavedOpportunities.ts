@@ -53,5 +53,6 @@ export function useSavedOpportunities() {
     isLoading,
     items,
     refresh,
+    token,
   };
 }

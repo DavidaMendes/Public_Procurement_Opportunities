@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
+import { cancelAlertNotification } from "@/services/notifications/alertNotificationService";
 import {
   isOpportunitySaved,
   removeSavedOpportunity,

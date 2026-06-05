@@ -17,6 +17,16 @@ export type SavedOpportunity = {
   alertDate: string | null;
   alertDone: boolean;
   savedAt: string;
+  alertDate: string | null;
+  alertDone: boolean;
+};
+
+export type SavedOpportunityListResponse = {
+  data: SavedOpportunityRaw[];
+};
+
+export type SavedOpportunityResponse = {
+  data: SavedOpportunityRaw;
 };
 
 export type SavedOpportunityListResponse = {
