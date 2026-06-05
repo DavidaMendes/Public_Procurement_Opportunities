@@ -10,6 +10,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useContratacaoChecklist } from "@/hooks/useContratacaoChecklist";
 import { ApiError } from "@/services/api/client";
 import { getContratacao } from "@/services/contratacoes/contratacaoService";
+import { cancelAlertNotification } from "@/services/notifications/alertNotificationService";
+import {
+  isOpportunitySaved,
+  removeSavedOpportunity,
+  saveOpportunity,
+} from "@/services/saved-opportunities/savedOpportunityService";
 import { theme } from "@/theme";
 import type { ContratacaoDetail } from "@/types/contratacao";
 
@@ -46,7 +52,10 @@ export default function ContratacaoDetailScreen() {
   const { signOut, token } = useAuth();
   const [contratacao, setContratacao] = useState<ContratacaoDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   const handleUnauthorized = useCallback(async () => {
     await signOut();
@@ -76,8 +85,10 @@ export default function ContratacaoDetailScreen() {
     try {
       setIsLoading(true);
       setError("");
+      setSaveError("");
       const response = await getContratacao({ id, token });
       setContratacao(response);
+      setIsSaved(await isOpportunitySaved({ id: response.id, token }));
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
         await handleUnauthorized();
@@ -97,6 +108,40 @@ export default function ContratacaoDetailScreen() {
   useEffect(() => {
     loadContratacao();
   }, [loadContratacao]);
+
+  async function handleToggleSaved() {
+    if (!contratacao || !token) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveError("");
+
+      if (isSaved) {
+        await removeSavedOpportunity({ id: contratacao.id, token });
+        await cancelAlertNotification(contratacao.id);
+        setIsSaved(false);
+        return;
+      }
+
+      await saveOpportunity({ id: contratacao.id, token });
+      setIsSaved(true);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      setSaveError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível atualizar os salvos.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <Screen>
@@ -120,6 +165,13 @@ export default function ContratacaoDetailScreen() {
               <Text style={styles.description}>
                 {formatText(contratacao.orgaoEntidade.razaoSocial)}
               </Text>
+              <Button
+                title={isSaved ? "Remover dos salvos" : "Salvar edital"}
+                loading={isSaving}
+                onPress={handleToggleSaved}
+                variant={isSaved ? "secondary" : "primary"}
+              />
+              {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
             </View>
 
             <View style={styles.card}>
@@ -195,7 +247,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   header: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   kicker: {
     color: theme.colors.primary,
