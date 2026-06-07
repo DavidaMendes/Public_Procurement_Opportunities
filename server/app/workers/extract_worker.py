@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from confluent_kafka import Producer
 from confluent_kafka.error import KafkaException
-from config.kafka_config import KAFKA_TOPICS, PRODUCER_CONFIG
+from app.config.kafka_config import KAFKA_TOPICS, PRODUCER_CONFIG
 from app.etl.extract import Extract
 from app.core.settings import RECIFE_PROCUREMENT
 
@@ -73,14 +73,20 @@ class ExtractWorker:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Extract data from PNCP API')
-    parser.add_argument('--dataInicial', type=str, default=RECIFE_PROCUREMENT['dataInicial'])
-    parser.add_argument('--dataFinal', type=str, default=RECIFE_PROCUREMENT['dataFinal'])
+    parser.add_argument('--dataInicial', type=str, default=RECIFE_PROCUREMENT['dataInicial'],
+                        help=f"Data inicial (padrão: {RECIFE_PROCUREMENT['dataInicial']})")
+    parser.add_argument('--dataFinal', type=str, default=RECIFE_PROCUREMENT['dataFinal'],
+                        help=f"Data final (padrão: {RECIFE_PROCUREMENT['dataFinal']})")
     parser.add_argument('--codigoModalidadeContratacao', type=str,
-                        default=RECIFE_PROCUREMENT.get('codigoModalidadeContratacao'))
+                        default=RECIFE_PROCUREMENT.get('codigoModalidadeContratacao'),
+                        help="Código modalidade (opcional)")
     parser.add_argument('--codigoMunicipioIbge', type=str,
-                        default=RECIFE_PROCUREMENT.get('codigoMunicipioIbge'))
-    parser.add_argument('--tamanhoPagina', type=int, default=50)
-    parser.add_argument('--maxPages', type=int, default=None, help='Máximo de páginas')
+                        default=RECIFE_PROCUREMENT.get('codigoMunicipioIbge'),
+                        help="Código município IBGE (opcional)")
+    parser.add_argument('--tamanhoPagina', type=int, default=50,
+                        help="Tamanho página (padrão: 50)")
+    parser.add_argument('--maxPages', type=int, default=None,
+                        help='Máximo de páginas (opcional)')
 
     args = parser.parse_args()
 

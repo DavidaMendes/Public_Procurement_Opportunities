@@ -34,7 +34,6 @@ CONSUMER_CONFIG = {
     'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
     'auto.offset.reset': 'earliest',
     'enable.auto.commit': False,
-    'max.poll.records': 100,
     'session.timeout.ms': 30000,
 }
 
