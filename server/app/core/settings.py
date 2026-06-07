@@ -6,8 +6,8 @@ load_dotenv()
 PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
 
 RECIFE_PROCUREMENT = {
-    "dataInicial": "20260601",
-    "dataFinal": "20260602",
+    "dataInicial": "20260605",
+    "dataFinal": "20260606",
     "codigoModalidadeContratacao": "8",
     "codigoMunicipioIbge": "2611606",
     "pagina": "1",

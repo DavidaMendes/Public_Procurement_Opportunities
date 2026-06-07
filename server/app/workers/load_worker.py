@@ -68,13 +68,32 @@ class LoadWorker:
 
     def _persist_batch(self, batch: list) -> bool:
         """
-        Persist batch of records to SQLite.
+        Persist batch of records to both SQLite and MongoDB.
+        Returns success status and logs detailed results.
         """
         try:
-            success_count = self.loader.batch_upsert_licitacoes(batch)
-            if success_count > 0:
-                print(f"[✓] {success_count}/{len(batch)} registros persistidos com sucesso")
-            return success_count > 0
+            result = self.loader.batch_persist(batch)
+
+            sqlite_res = result['sqlite']
+            mongodb_res = result['mongodb']
+            total = result['total_records']
+
+            sqlite_total = sqlite_res['inserted'] + sqlite_res['updated']
+            mongodb_total = mongodb_res['inserted']
+
+            if result['success']:
+                if sqlite_total != mongodb_total:
+                    print(f"[✓] {sqlite_total} em SQLite3 (ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']}) | "
+                          f"{mongodb_total} em MongoDB | Total: {total}")
+                else:
+                    print(f"[✓] {total} licitações salvas em SQLite3 e MongoDB "
+                          f"(ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']})")
+            else:
+                print(f"[⚠] Parcial - SQLite3: {sqlite_total} (erros: {sqlite_res['errors']}) | "
+                      f"MongoDB: {mongodb_total} (erros: {mongodb_res['errors']})")
+
+            return result['success']
+
         except Exception as e:
             print(f"[✗] Erro ao persistir lote: {e}")
             return False
