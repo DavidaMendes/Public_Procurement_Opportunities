@@ -1,15 +1,23 @@
 """Transform Worker - Kafka Consumer/Producer for data normalization."""
-import json
 import argparse
+import json
+from typing import Optional
+
 from confluent_kafka import Consumer, Producer
-from confluent_kafka.error import KafkaException
-from app.infrastructure.config import KAFKA_TOPICS, TRANSFORM_CONSUMER_CONFIG, PRODUCER_CONFIG
+
 from app.etl.transform import Transform
+from app.infrastructure.config import (
+    KAFKA_TOPICS,
+    PRODUCER_CONFIG,
+    TRANSFORM_CONSUMER_CONFIG,
+)
+
 
 def delivery_report(err, msg):
     """Delivery report callback."""
     if err is not None:
         print(f"Erro na entrega: {err}")
+
 
 class TransformWorker:
     def __init__(self):
@@ -17,24 +25,39 @@ class TransformWorker:
         self.producer = Producer(PRODUCER_CONFIG)
         self.transformer = Transform()
 
-        self.consumer.subscribe([KAFKA_TOPICS['raw_licitacoes']])
-        print(f"[✓] Inscrito no tópico: {KAFKA_TOPICS['raw_licitacoes']}")
+        self.consumer.subscribe([KAFKA_TOPICS["raw_licitacoes"]])
+        print(f"[OK] Inscrito no topico: {KAFKA_TOPICS['raw_licitacoes']}")
 
-    def run(self, timeout_ms: int = 1000):
+    def run(
+        self,
+        timeout_ms: int = 1000,
+        max_idle_polls: Optional[int] = None,
+        max_messages: Optional[int] = None,
+    ):
         """
         Consume from raw.licitacoes, transform, and produce to transformed.licitacoes.
-        """
-        try:
-            processed_count = 0
-            error_count = 0
 
+        max_idle_polls is useful for orchestrated runs: after the ExtractWorker finishes,
+        the consumer exits once Kafka stays idle for the configured number of polls.
+        """
+        processed_count = 0
+        error_count = 0
+        idle_polls = 0
+
+        try:
             print("[*] Aguardando mensagens...")
 
             while True:
                 msg = self.consumer.poll(timeout=timeout_ms / 1000)
 
                 if msg is None:
+                    idle_polls += 1
+                    if max_idle_polls and idle_polls >= max_idle_polls:
+                        print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
+                        break
                     continue
+
+                idle_polls = 0
 
                 if msg.error():
                     if msg.error().code() != -191:  # _PARTITION_EOF
@@ -42,16 +65,16 @@ class TransformWorker:
                     continue
 
                 try:
-                    record = json.loads(msg.value().decode('utf-8'))
+                    record = json.loads(msg.value().decode("utf-8"))
                     transformed = self.transformer.transform_record(record)
 
                     message = json.dumps(transformed, ensure_ascii=False, default=str)
 
                     self.producer.produce(
-                        topic=KAFKA_TOPICS['transformed_licitacoes'],
-                        value=message.encode('utf-8'),
-                        key=transformed.get('numero_controle_pncp', '').encode('utf-8'),
-                        callback=delivery_report
+                        topic=KAFKA_TOPICS["transformed_licitacoes"],
+                        value=message.encode("utf-8"),
+                        key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
+                        callback=delivery_report,
                     )
 
                     self.consumer.commit(asynchronous=True)
@@ -59,25 +82,29 @@ class TransformWorker:
 
                     if processed_count % 10 == 0:
                         self.producer.flush(timeout=5)
-                        print(f"[✓] {processed_count} registros transformados")
+                        print(f"[OK] {processed_count} registros transformados")
 
-                except Exception as e:
+                    if max_messages and processed_count >= max_messages:
+                        print(f"[*] Limite de {max_messages} mensagens transformadas atingido.")
+                        break
+
+                except Exception as exc:
                     error_record = {
-                        'error': str(e),
-                        'original_message': msg.value().decode('utf-8', errors='ignore'),
-                        'timestamp': str(msg.timestamp())
+                        "error": str(exc),
+                        "original_message": msg.value().decode("utf-8", errors="ignore"),
+                        "timestamp": str(msg.timestamp()),
                     }
                     error_message = json.dumps(error_record, ensure_ascii=False, default=str)
 
                     self.producer.produce(
-                        topic=KAFKA_TOPICS['transformed_licitacoes_dlq'],
-                        value=error_message.encode('utf-8'),
-                        callback=delivery_report
+                        topic=KAFKA_TOPICS["transformed_licitacoes_dlq"],
+                        value=error_message.encode("utf-8"),
+                        callback=delivery_report,
                     )
 
                     self.consumer.commit(asynchronous=True)
                     error_count += 1
-                    print(f"[✗] Erro ao transformar registro: {e}")
+                    print(f"[ERRO] Erro ao transformar registro: {exc}")
 
         except KeyboardInterrupt:
             print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
@@ -85,11 +112,28 @@ class TransformWorker:
             self.producer.flush(timeout=10)
             self.consumer.close()
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Transform PNCP data')
-    parser.add_argument('--timeout', type=int, default=1000, help='Timeout em ms')
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Transform PNCP data")
+    parser.add_argument("--timeout", type=int, default=1000, help="Timeout em ms")
+    parser.add_argument(
+        "--maxIdlePolls",
+        type=int,
+        default=None,
+        help="Encerra apos N polls sem mensagens (opcional)",
+    )
+    parser.add_argument(
+        "--maxMessages",
+        type=int,
+        default=None,
+        help="Encerra apos processar N mensagens (opcional)",
+    )
 
     args = parser.parse_args()
 
     worker = TransformWorker()
-    worker.run(timeout_ms=args.timeout)
+    worker.run(
+        timeout_ms=args.timeout,
+        max_idle_polls=args.maxIdlePolls,
+        max_messages=args.maxMessages,
+    )
