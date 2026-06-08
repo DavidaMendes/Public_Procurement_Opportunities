@@ -4,9 +4,8 @@ import argparse
 from datetime import datetime
 from confluent_kafka import Producer
 from confluent_kafka.error import KafkaException
-from app.config.kafka_config import KAFKA_TOPICS, PRODUCER_CONFIG
+from app.infrastructure.config import KAFKA_TOPICS, PRODUCER_CONFIG, RECIFE_PROCUREMENT
 from app.etl.extract import Extract
-from app.core.settings import RECIFE_PROCUREMENT
 
 def delivery_report(err, msg):
     """Delivery report callback."""

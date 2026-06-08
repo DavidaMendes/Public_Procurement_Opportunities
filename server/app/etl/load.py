@@ -1,9 +1,12 @@
-from app.core.database import client, get_sqlite_connection
+from app.infrastructure.database import client, get_sqlite_connection
 from typing import Dict, Any, List
 from datetime import datetime
 import sqlite3
 
+
 class Load():
+    """Persistent layer for SQLite and MongoDB."""
+
     def __init__(self, mongodb_db: str = "procurement", mongodb_collection: str = "licitacoes"):
         self.mongodb_db = mongodb_db
         self.mongodb_collection = mongodb_collection
@@ -100,13 +103,13 @@ class Load():
                         ))
                         inserted += 1
 
-                except sqlite3.Error as e:
+                except sqlite3.Error:
                     errors += 1
 
             conn.commit()
             conn.close()
 
-        except sqlite3.Error as e:
+        except sqlite3.Error:
             return {'inserted': inserted, 'updated': updated, 'errors': len(records)}
 
         return {'inserted': inserted, 'updated': updated, 'errors': errors}
@@ -116,26 +119,27 @@ class Load():
         Persist records to MongoDB.
         Returns: {'inserted': count, 'errors': count}
         """
-        if not client:
-            return {'inserted': 0, 'errors': len(records)}
+        if not client or not records:
+            return {'inserted': 0, 'errors': len(records) if records else 0}
 
         try:
             database = client[self.mongodb_db]
             collection = database[self.mongodb_collection]
-
-            if records and isinstance(records, list):
-                result = collection.insert_many(records)
-                return {'inserted': len(result.inserted_ids), 'errors': 0}
-            else:
-                return {'inserted': 0, 'errors': 0}
-
-        except Exception as e:
+            result = collection.insert_many(records)
+            return {'inserted': len(result.inserted_ids), 'errors': 0}
+        except Exception:
             return {'inserted': 0, 'errors': len(records)}
 
     def batch_persist(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Persist records to both SQLite and MongoDB.
-        Returns consolidated result with separate counts for each database.
+
+        Returns: {
+            'sqlite': {'inserted': int, 'updated': int, 'errors': int},
+            'mongodb': {'inserted': int, 'errors': int},
+            'total_records': int,
+            'success': bool
+        }
         """
         sqlite_result = self._persist_to_sqlite(records)
         mongodb_result = self._persist_to_mongodb(records)
@@ -146,27 +150,3 @@ class Load():
             'total_records': len(records),
             'success': sqlite_result['errors'] == 0 and mongodb_result['errors'] == 0
         }
-
-    def batch_upsert_licitacoes(self, records: List[Dict[str, Any]]) -> int:
-        """
-        Legacy method for backward compatibility.
-        Calls batch_persist and returns only SQLite success count.
-        """
-        result = self.batch_persist(records)
-        return result['sqlite']['inserted'] + result['sqlite']['updated']
-
-    def insert_data(self, api_response: list, db_name: str, table_name: str):
-        """Legacy method for standalone MongoDB insertion."""
-        if not client:
-            print("MongoDB client not available")
-            return
-
-        database = client[db_name]
-        collection = database[table_name]
-
-        if api_response and isinstance(api_response, list):
-            collection.insert_many(api_response)
-            print(f"{len(api_response)} documentos inseridos com sucesso.")
-        else:
-            print("Nenhum dado válido para inserir")
-

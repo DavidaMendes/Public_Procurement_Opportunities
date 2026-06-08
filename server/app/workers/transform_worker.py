@@ -3,7 +3,7 @@ import json
 import argparse
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.error import KafkaException
-from app.config.kafka_config import KAFKA_TOPICS, TRANSFORM_CONSUMER_CONFIG, PRODUCER_CONFIG
+from app.infrastructure.config import KAFKA_TOPICS, TRANSFORM_CONSUMER_CONFIG, PRODUCER_CONFIG
 from app.etl.transform import Transform
 
 def delivery_report(err, msg):

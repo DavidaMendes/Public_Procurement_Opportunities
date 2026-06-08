@@ -3,11 +3,11 @@ import os
 from dotenv import load_dotenv
 from prefect import flow, task, get_run_logger
 
-from app.core.settings import RECIFE_PROCUREMENT
+from app.infrastructure.settings import RECIFE_PROCUREMENT
 from app.etl.extract import Extract
 from app.etl.load import Load
 from app.etl.transform import Transform
-from app.core.exceptions import NonRetryableAPIError
+from app.infrastructure.exceptions import NonRetryableAPIError
 
 
 load_dotenv()

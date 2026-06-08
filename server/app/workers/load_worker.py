@@ -3,7 +3,7 @@ import json
 import argparse
 from confluent_kafka import Consumer
 from confluent_kafka.error import KafkaException
-from app.config.kafka_config import KAFKA_TOPICS, LOAD_CONSUMER_CONFIG
+from app.infrastructure.config import KAFKA_TOPICS, LOAD_CONSUMER_CONFIG
 from app.etl.load import Load
 
 class LoadWorker:

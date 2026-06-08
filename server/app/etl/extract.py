@@ -1,6 +1,6 @@
 import requests
-from app.core.settings import PNCP_BASE_URL
-from app.core.exceptions import NonRetryableAPIError
+from app.infrastructure.settings import PNCP_BASE_URL
+from app.infrastructure.exceptions import NonRetryableAPIError
 from typing import Dict, Generator, Any
 import time
 
