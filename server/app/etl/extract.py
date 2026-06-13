@@ -60,7 +60,7 @@ class Extract():
 
                 pages_fetched += 1
                 current_page += 1
-                time.sleep(0.5)  # Rate limiting
+                time.sleep(0.5)  
 
             except NonRetryableAPIError:
                 break

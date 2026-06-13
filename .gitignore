@@ -16,3 +16,4 @@ client/PPO-client/.env
 Thumbs.db
 .vscode/
 /data 
+venv
