@@ -64,6 +64,13 @@ export default function AppTabsLayout() {
           tabBarLabel: "Dashboard",
         }}
       />
+      <Tabs.Screen
+        name="conta/index"
+        options={{
+          title: "Conta",
+          tabBarLabel: "Conta",
+        }}
+      />
     </Tabs>
   );
 }
