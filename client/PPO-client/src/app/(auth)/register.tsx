@@ -5,7 +5,9 @@ import { useRouter } from "expo-router";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { FormError } from "@/components/ui/FormError";
+import { PasswordStrengthMeter } from "@/components/ui/PasswordStrengthMeter";
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
 import { RegisterFormData, registerSchema } from "@/features/auth/validation";
@@ -28,6 +30,7 @@ export default function RegisterScreen() {
       password: "",
       passwordConfirmation: "",
       companyIdentifier: "",
+      acceptedTerms: false,
     },
   });
 
@@ -101,16 +104,19 @@ export default function RegisterScreen() {
             control={control}
             name="password"
             render={({ field: { onBlur, onChange, value } }) => (
-              <TextField
-                error={errors.password?.message}
-                label="Senha"
-                onBlur={onBlur}
-                onChangeText={onChange}
-                placeholder="Mínimo de 6 caracteres"
-                secureTextEntry
-                textContentType="newPassword"
-                value={value}
-              />
+              <View style={styles.passwordField}>
+                <TextField
+                  error={errors.password?.message}
+                  label="Senha"
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  placeholder="Mín. 8: maiúscula, minúscula, número e símbolo"
+                  secureTextEntry
+                  textContentType="newPassword"
+                  value={value}
+                />
+                <PasswordStrengthMeter password={value} />
+              </View>
             )}
           />
           <Controller
@@ -143,6 +149,30 @@ export default function RegisterScreen() {
                 placeholder="12345678000195"
                 value={value}
               />
+            )}
+          />
+          <Controller
+            control={control}
+            name="acceptedTerms"
+            render={({ field: { onChange, value } }) => (
+              <Checkbox
+                checked={value}
+                onChange={onChange}
+                error={errors.acceptedTerms?.message}
+                accessibilityLabel="Aceitar Política de Privacidade e Termos de Uso"
+              >
+                <Text style={styles.consentText}>
+                  Li e aceito a{" "}
+                  <Text style={styles.consentLink} onPress={() => router.push("/privacidade")}>
+                    Política de Privacidade
+                  </Text>
+                  {" "}e os{" "}
+                  <Text style={styles.consentLink} onPress={() => router.push("/termos")}>
+                    Termos de Uso
+                  </Text>
+                  .
+                </Text>
+              </Checkbox>
             )}
           />
           <Button title="Cadastrar" loading={isSubmitting} onPress={handleSubmit(onSubmit)} />
@@ -190,6 +220,18 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: theme.spacing.lg,
+  },
+  passwordField: {
+    gap: theme.spacing.sm,
+  },
+  consentText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+    lineHeight: 20,
+  },
+  consentLink: {
+    color: theme.colors.primary,
+    fontWeight: "800",
   },
   footer: {
     flexDirection: "row",
