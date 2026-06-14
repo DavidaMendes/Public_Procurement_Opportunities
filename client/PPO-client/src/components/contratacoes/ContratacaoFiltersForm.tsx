@@ -44,10 +44,11 @@ export function ContratacaoFiltersForm({
         <View style={styles.ufField}>
           <TextField
             autoCapitalize="characters"
+            editable={false}
             label="UF"
-            onChangeText={(value) => updateFilter("uf", value.slice(0, 2))}
+            onChangeText={() => undefined}
             placeholder="PE"
-            value={filters.uf ?? ""}
+            value="PE"
           />
         </View>
 

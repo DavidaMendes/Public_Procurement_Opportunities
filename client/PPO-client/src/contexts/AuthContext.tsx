@@ -1,7 +1,8 @@
-import { login } from "@/services/auth/authService";
+import { login, logout } from "@/services/auth/authService";
+import { setUnauthorizedHandler } from "@/services/api/client";
 import { deleteToken, getToken, saveToken } from "@/services/auth/tokenStorage";
 import { LoginRequest } from "@/types/auth";
-import { createContext, useEffect, useState } from "react";
+import { createContext, useCallback, useEffect, useRef, useState } from "react";
 
 
 type AuthContextData = {
@@ -10,6 +11,7 @@ type AuthContextData = {
     isAuthenticated: boolean;
     signIn: (input: LoginRequest) => Promise<void>;
     signOut: () => Promise<void>;
+    clearSession: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextData | undefined>(undefined);
@@ -21,6 +23,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const [isLoading, setIsLoading] = useState(true);
 
     const isAuthenticated = !!token;
+
+    const tokenRef = useRef<string | null>(null);
+    tokenRef.current = token;
+
+    const clearSession = useCallback(async () => {
+        await deleteToken();
+        setToken(null);
+    }, []);
 
     useEffect(() => {
         async function loadStoredToken() {
@@ -34,6 +44,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         loadStoredToken();
     }, [])
 
+    useEffect(() => {
+        setUnauthorizedHandler(() => {
+            clearSession();
+        });
+
+        return () => setUnauthorizedHandler(null);
+    }, [clearSession]);
+
     const signIn = async (input: LoginRequest) => {
         const response = await login(input);
 
@@ -41,14 +59,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setToken(response.token);
     };
 
-    const signOut = async () => {
-        await deleteToken();
-        setToken(null);
-    };
+    const signOut = useCallback(async () => {
+        const currentToken = tokenRef.current;
+
+        if (currentToken) {
+            try {
+                await logout(currentToken);
+            } catch {
+            }
+        }
+
+        await clearSession();
+    }, [clearSession]);
 
 
     return (
-        <AuthContext.Provider value={{ token, isLoading, isAuthenticated, signIn, signOut }}>
+        <AuthContext.Provider
+            value={{ token, isLoading, isAuthenticated, signIn, signOut, clearSession }}
+        >
             {children}
         </AuthContext.Provider>
     );

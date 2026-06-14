@@ -2,7 +2,7 @@ import type { ContratacaoFilters } from "@/types/contratacao";
 
 export const initialContratacaoFilters: ContratacaoFilters = {
   q: "",
-  uf: "",
+  uf: "PE",
   valorMin: "",
   valorMax: "",
 };
@@ -14,7 +14,7 @@ export function hasContratacaoFilters(filters: ContratacaoFilters) {
 export function normalizeContratacaoFilters(filters: ContratacaoFilters): ContratacaoFilters {
   return {
     q: filters.q?.trim(),
-    uf: filters.uf?.trim().toUpperCase(),
+    uf: "PE",
     valorMin: filters.valorMin?.trim(),
     valorMax: filters.valorMax?.trim(),
   };

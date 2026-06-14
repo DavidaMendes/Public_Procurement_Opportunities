@@ -23,6 +23,7 @@ type TextFieldProps = {
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: TextInputProps["autoCapitalize"];
+  editable?: TextInputProps["editable"];
   textContentType?: TextInputProps["textContentType"];
 };
 
@@ -39,6 +40,7 @@ export function TextField({
   secureTextEntry = false,
   keyboardType = "default",
   autoCapitalize = "sentences",
+  editable = true,
   textContentType,
 }: TextFieldProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -53,24 +55,31 @@ export function TextField({
           styles.inputWrapper,
           isFocused && styles.inputWrapperFocused,
           error && styles.inputWrapperError,
+          !editable && styles.inputWrapperDisabled,
         ]}
       >
-        <TextInput
-          autoCapitalize={autoCapitalize}
-          keyboardType={keyboardType}
-          onBlur={(event) => {
-            setIsFocused(false);
-            onBlur?.(event);
-          }}
-          onChangeText={onChangeText}
-          onFocus={() => setIsFocused(true)}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.textMuted}
-          secureTextEntry={secureTextEntry && !isPasswordVisible}
-          style={[styles.input, webInputStyle]}
-          textContentType={textContentType}
-          value={value}
-        />
+        {editable ? (
+          <TextInput
+            autoCapitalize={autoCapitalize}
+            keyboardType={keyboardType}
+            onBlur={(event) => {
+              setIsFocused(false);
+              onBlur?.(event);
+            }}
+            onChangeText={onChangeText}
+            onFocus={() => setIsFocused(true)}
+            placeholder={placeholder}
+            placeholderTextColor={theme.colors.textMuted}
+            secureTextEntry={secureTextEntry && !isPasswordVisible}
+            style={[styles.input, webInputStyle]}
+            textContentType={textContentType}
+            value={value}
+          />
+        ) : (
+          <Text numberOfLines={1} style={[styles.input, styles.inputDisabled]}>
+            {value || placeholder}
+          </Text>
+        )}
         {canTogglePassword ? (
           <Pressable
             accessibilityRole="button"
@@ -112,11 +121,17 @@ const styles = StyleSheet.create({
   inputWrapperFocused: {
     borderColor: theme.colors.focus,
   },
+  inputWrapperDisabled: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
   input: {
     flex: 1,
     color: theme.colors.text,
     fontSize: theme.typography.body,
     paddingVertical: theme.spacing.md,
+  },
+  inputDisabled: {
+    color: theme.colors.disabled,
   },
   toggle: {
     minHeight: 44,
