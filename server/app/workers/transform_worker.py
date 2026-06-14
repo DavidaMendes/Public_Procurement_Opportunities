@@ -60,7 +60,7 @@ class TransformWorker:
                 idle_polls = 0
 
                 if msg.error():
-                    if msg.error().code() != -191:  # _PARTITION_EOF
+                    if msg.error().code() != -191:  
                         print(f"Erro Kafka: {msg.error()}")
                     continue
 

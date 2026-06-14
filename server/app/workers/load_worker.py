@@ -1,4 +1,3 @@
-"""Load Worker - Kafka Consumer for data persistence."""
 import argparse
 import json
 from typing import Optional
