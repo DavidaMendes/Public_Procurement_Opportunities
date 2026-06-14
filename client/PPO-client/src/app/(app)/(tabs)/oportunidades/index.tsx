@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { formatDate } from "@/helpers/formatDate";
 import { useAuth } from "@/hooks/useAuth";
-import { ApiError } from "@/services/api/client";
 import {
   hasContratacaoFilters,
   initialContratacaoFilters,
@@ -30,11 +29,6 @@ export default function OportunidadesScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const isFiltering = hasContratacaoFilters(appliedFilters);
-
-  const handleUnauthorized = useCallback(async () => {
-    await signOut();
-    router.replace("/(auth)/login");
-  }, [router, signOut]);
 
   const loadPage = useCallback(
     async (pageToLoad: number, mode: "replace" | "append") => {
@@ -60,11 +54,7 @@ export default function OportunidadesScreen() {
         setTotal(response.total);
         setTotalPages(response.totalPages);
       } catch (requestError) {
-        if (requestError instanceof ApiError && requestError.status === 401) {
-          await handleUnauthorized();
-          return;
-        }
-
+        
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -72,7 +62,7 @@ export default function OportunidadesScreen() {
         );
       }
     },
-    [appliedFilters, handleUnauthorized, token],
+    [appliedFilters, token],
   );
 
   useEffect(() => {

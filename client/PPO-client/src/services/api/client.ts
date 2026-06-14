@@ -4,6 +4,7 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  suppressUnauthorizedHandler?: boolean;
 };
 
 type ExpoExtra = {
@@ -22,6 +23,12 @@ const expoExtra = Constants.expoConfig?.extra as ExpoExtra | undefined;
 export const apiConfig = {
   baseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? expoExtra?.apiBaseUrl ?? "",
 };
+
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
 
 export class ApiConfigurationError extends Error {
   constructor() {
@@ -48,7 +55,7 @@ async function parseResponseBody(response: Response) {
   }
 }
 
-function getApiErrorMessage(data: unknown) {
+function getApiErrorMessage(data: unknown, status: number) {
   const errorData = data as ApiErrorResponse | null;
 
   if (typeof errorData?.error === "string") {
@@ -59,6 +66,10 @@ function getApiErrorMessage(data: unknown) {
 
   if (typeof firstValidationError === "string") {
     return firstValidationError;
+  }
+
+  if (status === 429) {
+    return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
   }
 
   return "Não foi possível concluir a comunicação com a API.";
@@ -84,7 +95,11 @@ export async function apiRequest<TResponse>(
   const data = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new ApiError(getApiErrorMessage(data), response.status);
+    if (response.status === 401 && !options.suppressUnauthorizedHandler) {
+      unauthorizedHandler?.();
+    }
+
+    throw new ApiError(getApiErrorMessage(data, response.status), response.status);
   }
 
   return data as TResponse;

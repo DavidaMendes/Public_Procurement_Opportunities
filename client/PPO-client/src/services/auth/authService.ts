@@ -14,3 +14,12 @@ export function register(input: RegisterRequest) {
     body: input,
   });
 }
+
+export function logout(token: string) {
+  return apiRequest<{ message: string }>("/auth/logout", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
