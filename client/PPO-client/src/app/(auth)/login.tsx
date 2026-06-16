@@ -93,6 +93,14 @@ export default function LoginScreen() {
               />
             )}
           />
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => router.push("/forgot-password")}
+            style={styles.forgotWrapper}
+          >
+            <Text style={styles.forgotLink}>Esqueci minha senha</Text>
+          </Pressable>
           <Button title="Entrar" loading={isSubmitting} onPress={handleSubmit(onSubmit)} />
         </View>
 
@@ -138,6 +146,15 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: theme.spacing.lg,
+  },
+  forgotWrapper: {
+    alignSelf: "flex-end",
+    marginTop: -theme.spacing.sm,
+  },
+  forgotLink: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small,
+    fontWeight: "700",
   },
   footer: {
     flexDirection: "row",

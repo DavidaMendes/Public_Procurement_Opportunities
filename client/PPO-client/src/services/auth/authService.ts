@@ -23,3 +23,19 @@ export function logout(token: string) {
     },
   });
 }
+
+export function forgotPassword(email: string) {
+  // A API responde sempre com uma mensagem genérica; em dev também devolve
+  // `resetToken` para facilitar o teste do fluxo.
+  return apiRequest<{ message: string; resetToken?: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function resetPassword(input: { token: string; novaSenha: string }) {
+  return apiRequest<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: input,
+  });
+}

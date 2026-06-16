@@ -50,3 +50,25 @@ export const registerSchema = z
   });
 
 export type RegisterFormData = z.infer<typeof registerSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Informe seu e-mail.")
+    .email("Informe um e-mail valido."),
+});
+
+export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z
+  .object({
+    novaSenha: strongPassword,
+    confirmarSenha: z.string().min(1, "Confirme sua senha."),
+  })
+  .refine((data) => data.novaSenha === data.confirmarSenha, {
+    message: "As senhas não conferem.",
+    path: ["confirmarSenha"],
+  });
+
+export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
