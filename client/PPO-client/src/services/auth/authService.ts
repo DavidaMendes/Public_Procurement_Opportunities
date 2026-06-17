@@ -39,3 +39,20 @@ export function resetPassword(input: { token: string; novaSenha: string }) {
     body: input,
   });
 }
+
+export function changePassword(input: {
+  token: string;
+  senhaAtual: string;
+  novaSenha: string;
+}) {
+  return apiRequest<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.token}`,
+    },
+    body: { senhaAtual: input.senhaAtual, novaSenha: input.novaSenha },
+    // Um 401 aqui significa "senha atual incorreta" (erro de negócio), não
+    // token revogado — a tela trata localmente, sem logout global.
+    suppressUnauthorizedHandler: true,
+  });
+}

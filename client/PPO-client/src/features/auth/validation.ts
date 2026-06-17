@@ -72,3 +72,20 @@ export const resetPasswordSchema = z
   });
 
 export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    senhaAtual: z.string().min(1, "Informe sua senha atual."),
+    novaSenha: strongPassword,
+    confirmarSenha: z.string().min(1, "Confirme a nova senha."),
+  })
+  .refine((data) => data.novaSenha === data.confirmarSenha, {
+    message: "As senhas não conferem.",
+    path: ["confirmarSenha"],
+  })
+  .refine((data) => data.novaSenha !== data.senhaAtual, {
+    message: "A nova senha deve ser diferente da atual.",
+    path: ["novaSenha"],
+  });
+
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
