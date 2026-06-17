@@ -1,14 +1,41 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
 import { documentTemplates } from "@/services/documents/documentTemplates";
+import type { DocumentTemplate } from "@/types/documentTemplate";
 import { theme } from "@/theme";
 
 export default function DocumentosScreen() {
   const [query, setQuery] = useState("");
   const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
+  const copyResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeout.current) {
+        clearTimeout(copyResetTimeout.current);
+      }
+    };
+  }, []);
+
+  async function handleCopyTemplate(template: DocumentTemplate) {
+    await Clipboard.setStringAsync(template.template);
+    setCopiedTemplateId(template.id);
+
+    if (copyResetTimeout.current) {
+      clearTimeout(copyResetTimeout.current);
+    }
+
+    copyResetTimeout.current = setTimeout(() => {
+      setCopiedTemplateId(null);
+    }, 2000);
+  }
+
   const filteredTemplates = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -50,14 +77,14 @@ export default function DocumentosScreen() {
         <View style={styles.list}>
           {filteredTemplates.map((template) => {
             const isExpanded = expandedTemplateId === template.id;
+            const isCopied = copiedTemplateId === template.id;
 
             return (
               <View key={template.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{template.title}</Text>
-                  <View style={styles.formatBadge}>
-                    <Text style={styles.formatText}>{template.format}</Text>
-                  </View>
+                <Text style={styles.cardTitle}>{template.title}</Text>
+
+                <View style={styles.formatBadge}>
+                  <Text style={styles.formatText}>{template.format}</Text>
                 </View>
 
                 <Text style={styles.summary}>{template.summary}</Text>
@@ -67,17 +94,41 @@ export default function DocumentosScreen() {
                   <Text style={styles.infoText}>{template.requiredWhen}</Text>
                 </View>
 
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setExpandedTemplateId(isExpanded ? null : template.id);
-                  }}
-                  style={({ pressed }) => [styles.templateButton, pressed && styles.templateButtonPressed]}
-                >
-                  <Text style={styles.templateButtonText}>
-                    {isExpanded ? "Ocultar modelo" : "Ver modelo"}
-                  </Text>
-                </Pressable>
+                <View style={styles.actions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setExpandedTemplateId(isExpanded ? null : template.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.templateButton,
+                      styles.templateButtonExpand,
+                      pressed && styles.templateButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.templateButtonText}>
+                      {isExpanded ? "Ocultar modelo" : "Ver modelo"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Copiar modelo: ${template.title}`}
+                    onPress={() => handleCopyTemplate(template)}
+                    style={({ pressed }) => [
+                      styles.copyButton,
+                      isCopied && styles.copyButtonDone,
+                      pressed && styles.templateButtonPressed,
+                    ]}
+                  >
+                    <Ionicons
+                      name={isCopied ? "checkmark" : "copy-outline"}
+                      size={18}
+                      color={isCopied ? theme.colors.primaryDark : theme.colors.primary}
+                    />
+                    <Text style={styles.copyButtonText}>{isCopied ? "Copiado!" : "Copiar"}</Text>
+                  </Pressable>
+                </View>
 
                 {isExpanded ? (
                   <View style={styles.templateBox}>
@@ -136,19 +187,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.lg,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.spacing.md,
-  },
   cardTitle: {
-    flex: 1,
     color: theme.colors.text,
     fontSize: theme.typography.body,
     fontWeight: "800",
     lineHeight: 22,
   },
   formatBadge: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
     borderRadius: theme.radius.sm,
     backgroundColor: theme.colors.surfaceMuted,
     paddingHorizontal: theme.spacing.sm,
@@ -178,6 +225,11 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     lineHeight: 20,
   },
+  actions: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: theme.spacing.sm,
+  },
   templateButton: {
     minHeight: 44,
     alignItems: "center",
@@ -187,10 +239,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: theme.spacing.lg,
   },
+  templateButtonExpand: {
+    flex: 1,
+  },
   templateButtonPressed: {
     opacity: 0.82,
   },
   templateButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small,
+    fontWeight: "800",
+  },
+  copyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.xs,
+    minHeight: 44,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+  },
+  copyButtonDone: {
+    backgroundColor: theme.colors.successSurface,
+    borderColor: theme.colors.successSurface,
+  },
+  copyButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small,
     fontWeight: "800",

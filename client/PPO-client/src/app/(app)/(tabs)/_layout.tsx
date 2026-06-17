@@ -1,6 +1,12 @@
 import { Tabs } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { theme } from "@/theme";
+
+type TabIconProps = {
+  color: string;
+  size: number;
+};
 
 export default function AppTabsLayout() {
   return (
@@ -9,9 +15,6 @@ export default function AppTabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textMuted,
-        tabBarIconStyle: {
-          display: "none",
-        },
         tabBarItemStyle: {
           paddingVertical: theme.spacing.sm,
         },
@@ -22,7 +25,7 @@ export default function AppTabsLayout() {
           lineHeight: 14,
         },
         tabBarStyle: {
-          minHeight: 58,
+          minHeight: 64,
           borderTopColor: theme.colors.border,
           backgroundColor: theme.colors.surface,
           paddingTop: theme.spacing.sm,
@@ -41,6 +44,9 @@ export default function AppTabsLayout() {
         options={{
           title: "Oportunidades",
           tabBarLabel: "Oportunidades",
+          tabBarIcon: ({ color, size }: TabIconProps) => (
+            <Ionicons name="briefcase-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -48,6 +54,9 @@ export default function AppTabsLayout() {
         options={{
           title: "Documentos",
           tabBarLabel: "Documentos",
+          tabBarIcon: ({ color, size }: TabIconProps) => (
+            <Ionicons name="document-text-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -55,6 +64,9 @@ export default function AppTabsLayout() {
         options={{
           title: "Alertas",
           tabBarLabel: "Alertas",
+          tabBarIcon: ({ color, size }: TabIconProps) => (
+            <Ionicons name="notifications-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -62,6 +74,9 @@ export default function AppTabsLayout() {
         options={{
           title: "Dashboard",
           tabBarLabel: "Dashboard",
+          tabBarIcon: ({ color, size }: TabIconProps) => (
+            <Ionicons name="stats-chart-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -69,6 +84,9 @@ export default function AppTabsLayout() {
         options={{
           title: "Conta",
           tabBarLabel: "Conta",
+          tabBarIcon: ({ color, size }: TabIconProps) => (
+            <Ionicons name="person-outline" color={color} size={size} />
+          ),
         }}
       />
     </Tabs>

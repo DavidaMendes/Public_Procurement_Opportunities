@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { ContratacaoFiltersForm } from "@/components/contratacoes/ContratacaoFiltersForm";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,8 @@ import type { ContratacaoFilters, ContratacaoListItem } from "@/types/contrataca
 export default function OportunidadesScreen() {
   const router = useRouter();
   const { signOut, token } = useAuth();
+  const listRef = useRef<FlatList<ContratacaoListItem>>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const [items, setItems] = useState<ContratacaoListItem[]>([]);
   const [filters, setFilters] = useState<ContratacaoFilters>(initialContratacaoFilters);
   const [appliedFilters, setAppliedFilters] = useState<ContratacaoFilters>(initialContratacaoFilters);
@@ -122,6 +125,11 @@ export default function OportunidadesScreen() {
     <Screen scroll={false}>
       <View style={styles.container}>
         <FlatList
+          ref={listRef}
+          onScroll={(event) => {
+            setShowScrollTop(event.nativeEvent.contentOffset.y > 400);
+          }}
+          scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           data={isLoading || error ? [] : items}
           keyExtractor={(item, index) => `${item.id}-${index}`}
@@ -194,6 +202,17 @@ export default function OportunidadesScreen() {
             </Pressable>
           )}
         />
+
+        {showScrollTop ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Voltar ao topo"
+            onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
+            style={({ pressed }) => [styles.scrollTopButton, pressed && styles.scrollTopButtonPressed]}
+          >
+            <Ionicons name="arrow-up" size={24} color={theme.colors.surface} />
+          </Pressable>
+        ) : null}
       </View>
     </Screen>
   );
@@ -292,5 +311,24 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: theme.typography.small,
     fontWeight: "800",
+  },
+  scrollTopButton: {
+    position: "absolute",
+    right: theme.spacing.lg,
+    bottom: theme.spacing.lg,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    backgroundColor: theme.colors.primary,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  scrollTopButtonPressed: {
+    opacity: 0.85,
   },
 });
