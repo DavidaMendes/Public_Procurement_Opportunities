@@ -1,6 +1,7 @@
 """Transform Worker - Kafka Consumer/Producer for data normalization."""
 import argparse
 import json
+import time
 from typing import Optional
 
 from confluent_kafka import Consumer, Producer
@@ -11,12 +12,33 @@ from app.infrastructure.config import (
     PRODUCER_CONFIG,
     TRANSFORM_CONSUMER_CONFIG,
 )
+from app.infrastructure.logging_config import configure_logging, get_logger
+
+logger = get_logger("transform")
 
 
 def delivery_report(err, msg):
-    """Delivery report callback."""
+    """Kafka delivery callback."""
     if err is not None:
-        print(f"Erro na entrega: {err}")
+        logger.error(
+            "Falha na entrega da mensagem ao Kafka",
+            extra={
+                "event": "delivery_failed",
+                "topic": msg.topic() if msg is not None else None,
+                "reason": str(err),
+            },
+        )
+        return
+
+    logger.debug(
+        "Mensagem entregue ao Kafka",
+        extra={
+            "event": "delivered",
+            "topic": msg.topic(),
+            "partition": msg.partition(),
+            "offset": msg.offset(),
+        },
+    )
 
 
 class TransformWorker:
@@ -27,9 +49,13 @@ class TransformWorker:
 
         self.transform_input_topic = KAFKA_TOPICS["transform_licitacoes"]
         self.silver_load_topic = KAFKA_TOPICS["load_silver_licitacoes"]
+        self.silver_load_dlq_topic = KAFKA_TOPICS["load_silver_licitacoes_dlq"]
 
         self.consumer.subscribe([self.transform_input_topic])
-        print(f"[OK] Inscrito no topico: {self.transform_input_topic}")
+        logger.info(
+            "Inscrito no topico de entrada",
+            extra={"event": "subscribed", "topic": self.transform_input_topic},
+        )
 
     def _publish_transformed_record_to_silver_load_topic(self, transformed: dict):
         message = json.dumps(transformed, ensure_ascii=False, default=str)
@@ -40,6 +66,21 @@ class TransformWorker:
             key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
             callback=delivery_report,
         )
+        self.producer.poll(0)
+
+    def _publish_transform_error_to_dlq(self, msg, exc: Exception):
+        error_record = {
+            "error": str(exc),
+            "original_message": msg.value().decode("utf-8", errors="ignore"),
+            "timestamp": str(msg.timestamp()),
+        }
+        error_message = json.dumps(error_record, ensure_ascii=False, default=str)
+
+        self.producer.produce(
+            topic=self.silver_load_dlq_topic,
+            value=error_message.encode("utf-8"),
+            callback=delivery_report,
+        )
 
     def run(
         self,
@@ -47,34 +88,43 @@ class TransformWorker:
         max_idle_polls: Optional[int] = None,
         max_messages: Optional[int] = None,
     ):
-        """
-        Consume extracted data, transform it, and publish to the silver-load topic.
-
-        max_idle_polls is useful for orchestrated runs: after the ExtractWorker finishes,
-        the consumer exits once Kafka stays idle for the configured number of polls.
-        """
+        """Consume extracted records, transform them, and publish to the silver-load topic."""
         processed_count = 0
         error_count = 0
         idle_polls = 0
+        started = time.monotonic()
+
+        logger.info(
+            "Transformacao iniciada",
+            extra={
+                "event": "stage_start",
+                "input_topic": self.transform_input_topic,
+                "output_topic": self.silver_load_topic,
+            },
+        )
 
         try:
-            print("[*] Aguardando mensagens...")
-
             while True:
                 msg = self.consumer.poll(timeout=timeout_ms / 1000)
 
                 if msg is None:
                     idle_polls += 1
                     if max_idle_polls and idle_polls >= max_idle_polls:
-                        print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
+                        logger.info(
+                            "Encerrando por ociosidade",
+                            extra={"event": "idle_shutdown", "idle_polls": idle_polls},
+                        )
                         break
                     continue
 
                 idle_polls = 0
 
                 if msg.error():
-                    if msg.error().code() != -191:  
-                        print(f"Erro Kafka: {msg.error()}")
+                    if msg.error().code() != -191:  # _PARTITION_EOF
+                        logger.warning(
+                            "Erro reportado pelo Kafka",
+                            extra={"event": "kafka_error", "reason": str(msg.error())},
+                        )
                     continue
 
                 try:
@@ -82,40 +132,63 @@ class TransformWorker:
                     transformed = self.transformer.transform_record(record)
                     self._publish_transformed_record_to_silver_load_topic(transformed)
 
+                    key = transformed.get("numero_controle_pncp", "")
                     self.consumer.commit(asynchronous=True)
                     processed_count += 1
 
+                    logger.debug(
+                        "Registro transformado",
+                        extra={
+                            "event": "record_transformed",
+                            "key": key,
+                            "processed_count": processed_count,
+                        },
+                    )
+
                     if processed_count % 10 == 0:
                         self.producer.flush(timeout=5)
-                        print(f"[OK] {processed_count} registros transformados")
+                        logger.info(
+                            "Progresso de transformacao",
+                            extra={"event": "transform_progress", "count": processed_count},
+                        )
 
                     if max_messages and processed_count >= max_messages:
-                        print(f"[*] Limite de {max_messages} mensagens transformadas atingido.")
+                        logger.info(
+                            "Limite de mensagens atingido",
+                            extra={"event": "max_messages_reached", "count": processed_count},
+                        )
                         break
 
                 except Exception as exc:
-                    error_record = {
-                        "error": str(exc),
-                        "original_message": msg.value().decode("utf-8", errors="ignore"),
-                        "timestamp": str(msg.timestamp()),
-                    }
-                    error_message = json.dumps(error_record, ensure_ascii=False, default=str)
-
-                    self.producer.produce(
-                        topic=KAFKA_TOPICS["load_silver_licitacoes_dlq"],
-                        value=error_message.encode("utf-8"),
-                        callback=delivery_report,
-                    )
-
+                    self._publish_transform_error_to_dlq(msg, exc)
                     self.consumer.commit(asynchronous=True)
                     error_count += 1
-                    print(f"[ERRO] Erro ao transformar registro: {exc}")
+                    logger.warning(
+                        "Registro enviado para a DLQ",
+                        extra={
+                            "event": "dlq_sent",
+                            "dlq_topic": self.silver_load_dlq_topic,
+                            "reason": str(exc),
+                        },
+                    )
 
         except KeyboardInterrupt:
-            print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
+            logger.info(
+                "Transformacao interrompida manualmente",
+                extra={"event": "interrupted", "count": processed_count, "error_count": error_count},
+            )
         finally:
             self.producer.flush(timeout=10)
             self.consumer.close()
+            logger.info(
+                "Transformacao finalizada",
+                extra={
+                    "event": "stage_end",
+                    "count": processed_count,
+                    "error_count": error_count,
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                },
+            )
 
 
 if __name__ == "__main__":
@@ -135,6 +208,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    configure_logging(component="transform")
 
     worker = TransformWorker()
     worker.run(

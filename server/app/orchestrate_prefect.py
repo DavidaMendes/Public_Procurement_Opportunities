@@ -20,12 +20,21 @@ from app.infrastructure.config import (
 )
 from app.infrastructure.database import init_sqlite_db
 from app.infrastructure.exceptions import NonRetryableAPIError
+from app.infrastructure.logging_config import configure_logging, get_logger, resolve_run_id
 
 
 load_dotenv()
 
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
+
+
+def _ensure_run_logging():
+    """Generate + propagate the run_id and configure file logging once."""
+    if not os.environ.get("PPO_RUN_ID"):
+        os.environ["PPO_RUN_ID"] = resolve_run_id()
+    configure_logging()
+    return get_logger("orchestrator")
 
 
 def _should_retry_extract(task, task_run, state) -> bool:
@@ -263,9 +272,11 @@ def procurement_etl_flow(
     mongodb_bronze_collection: str = MONGODB_BRONZE_COLLECTION_NAME,
 ) -> Dict[str, Any]:
     logger = get_run_logger()
+    file_logger = _ensure_run_logging()
     resolved_params = params or RECIFE_PROCUREMENT
 
     logger.info("Pipeline ETL iniciado.")
+    file_logger.info("Pipeline ETL iniciado", extra={"event": "pipeline_start", "mode": "batch"})
 
     initialize_database()
     extracted_records = extract_procurements(resolved_params, max_pages=max_pages)
@@ -289,6 +300,7 @@ def procurement_etl_flow(
     }
 
     logger.info("Pipeline ETL finalizado: %s", result)
+    file_logger.info("Pipeline ETL finalizado", extra={"event": "pipeline_end", "mode": "batch", **result})
     return result
 
 
@@ -303,9 +315,11 @@ def procurement_streaming_flow(
     worker_timeout_seconds: int = 300,
 ) -> Dict[str, Any]:
     logger = get_run_logger()
+    file_logger = _ensure_run_logging()
     resolved_params = params or RECIFE_PROCUREMENT
 
     logger.info("Pipeline streaming iniciado via Prefect + Kafka workers.")
+    file_logger.info("Pipeline streaming iniciado", extra={"event": "pipeline_start", "mode": "streaming"})
 
     initialize_database()
     result = run_kafka_workers(
@@ -319,4 +333,5 @@ def procurement_streaming_flow(
     )
 
     logger.info("Pipeline streaming finalizado: %s", result)
+    file_logger.info("Pipeline streaming finalizado", extra={"event": "pipeline_end", "mode": "streaming"})
     return result

@@ -1,11 +1,15 @@
 import argparse
 import json
+import time
 from typing import Optional
 
 from confluent_kafka import Consumer
 
 from app.etl.load import Load
 from app.infrastructure.config import KAFKA_TOPICS, LOAD_CONSUMER_CONFIG
+from app.infrastructure.logging_config import configure_logging, get_logger
+
+logger = get_logger("load")
 
 
 class LoadWorker:
@@ -16,7 +20,15 @@ class LoadWorker:
         self.bronze_load_topic = KAFKA_TOPICS["load_bronze_licitacoes"]
         self.silver_load_topic = KAFKA_TOPICS["load_silver_licitacoes"]
         self.consumer.subscribe([self.bronze_load_topic, self.silver_load_topic])
-        print(f"[OK] Inscrito nos topicos: {self.bronze_load_topic}, {self.silver_load_topic}")
+
+        logger.info(
+            "Inscrito nos topicos de entrada",
+            extra={
+                "event": "subscribed",
+                "bronze_topic": self.bronze_load_topic,
+                "silver_topic": self.silver_load_topic,
+            },
+        )
 
     def run(
         self,
@@ -25,12 +37,6 @@ class LoadWorker:
         max_idle_polls: Optional[int] = None,
         max_messages: Optional[int] = None,
     ):
-        """
-        Consume bronze and transformed data and persist to MongoDB/SQLite.
-
-        max_idle_polls is useful for orchestrated runs: after upstream workers stop
-        producing messages, this worker exits once Kafka stays idle.
-        """
         processed_count = 0
         error_count = 0
         idle_polls = 0
@@ -38,28 +44,33 @@ class LoadWorker:
             self.bronze_load_topic: [],
             self.silver_load_topic: [],
         }
+        started = time.monotonic()
+
+        logger.info(
+            "Carga iniciada",
+            extra={
+                "event": "stage_start",
+                "batch_size": batch_size,
+                "bronze_topic": self.bronze_load_topic,
+                "silver_topic": self.silver_load_topic,
+            },
+        )
 
         try:
-            print("[*] Aguardando mensagens...")
-
             while True:
                 msg = self.consumer.poll(timeout=timeout_ms / 1000)
 
                 if msg is None:
                     idle_polls += 1
-                    for topic, batch in batches.items():
-                        if batch:
-                            success = self._persist_load_topic_batch(topic, batch)
-                            if success:
-                                for kafka_msg, _ in batch:
-                                    self.consumer.commit(message=kafka_msg, asynchronous=True)
-                                processed_count += len(batch)
-                            else:
-                                error_count += len(batch)
-                            batches[topic] = []
+                    flushed_count, flushed_errors = self._flush_pending_batches(batches)
+                    processed_count += flushed_count
+                    error_count += flushed_errors
 
                     if max_idle_polls and idle_polls >= max_idle_polls:
-                        print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
+                        logger.info(
+                            "Encerrando por ociosidade",
+                            extra={"event": "idle_shutdown", "idle_polls": idle_polls},
+                        )
                         break
                     continue
 
@@ -67,46 +78,81 @@ class LoadWorker:
 
                 if msg.error():
                     if msg.error().code() != -191:  # _PARTITION_EOF
-                        print(f"Erro Kafka: {msg.error()}")
+                        logger.warning(
+                            "Erro reportado pelo Kafka",
+                            extra={"event": "kafka_error", "reason": str(msg.error())},
+                        )
                     continue
 
                 try:
-                    record = json.loads(msg.value().decode("utf-8"))
                     topic = msg.topic()
-
                     if topic not in batches:
                         raise ValueError(f"Topico nao suportado pelo LoadWorker: {topic}")
 
+                    record = json.loads(msg.value().decode("utf-8"))
                     batches[topic].append((msg, record))
 
                     if len(batches[topic]) >= batch_size:
                         success = self._persist_load_topic_batch(topic, batches[topic])
                         if success:
-                            for kafka_msg, _ in batches[topic]:
-                                self.consumer.commit(message=kafka_msg, asynchronous=True)
+                            self._commit_batch(batches[topic])
                             processed_count += len(batches[topic])
                         else:
                             error_count += len(batches[topic])
                         batches[topic] = []
 
-                        print(f"[OK] {processed_count} registros persistidos (erros: {error_count})")
-
                     if max_messages and processed_count >= max_messages:
-                        print(f"[*] Limite de {max_messages} mensagens persistidas atingido.")
+                        logger.info(
+                            "Limite de mensagens atingido",
+                            extra={"event": "max_messages_reached", "count": processed_count},
+                        )
                         break
 
-                except Exception as exc:
+                except Exception:
                     error_count += 1
-                    print(f"[ERRO] Erro ao processar registro: {exc}")
+                    logger.error("Erro ao processar registro", extra={"event": "error"}, exc_info=True)
 
         except KeyboardInterrupt:
-            print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
+            logger.info(
+                "Carga interrompida manualmente",
+                extra={"event": "interrupted", "count": processed_count, "error_count": error_count},
+            )
         finally:
-            for topic, batch in batches.items():
-                if batch and self._persist_load_topic_batch(topic, batch):
-                    for kafka_msg, _ in batch:
-                        self.consumer.commit(message=kafka_msg, asynchronous=True)
+            flushed_count, flushed_errors = self._flush_pending_batches(batches)
+            processed_count += flushed_count
+            error_count += flushed_errors
             self.consumer.close()
+            logger.info(
+                "Carga finalizada",
+                extra={
+                    "event": "stage_end",
+                    "count": processed_count,
+                    "error_count": error_count,
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                },
+            )
+
+    def _flush_pending_batches(self, batches: dict) -> tuple[int, int]:
+        processed_count = 0
+        error_count = 0
+
+        for topic, batch in batches.items():
+            if not batch:
+                continue
+
+            success = self._persist_load_topic_batch(topic, batch)
+            if success:
+                self._commit_batch(batch)
+                processed_count += len(batch)
+            else:
+                error_count += len(batch)
+            batches[topic] = []
+
+        return processed_count, error_count
+
+    def _commit_batch(self, batch: list):
+        for kafka_msg, _ in batch:
+            self.consumer.commit(message=kafka_msg, asynchronous=True)
 
     def _persist_load_topic_batch(self, topic: str, batch: list) -> bool:
         records = [record for _, record in batch]
@@ -117,67 +163,58 @@ class LoadWorker:
         if topic == self.silver_load_topic:
             return self._persist_silver_load_batch(records)
 
-        print(f"[ERRO] Topico nao suportado pelo LoadWorker: {topic}")
+        logger.error(
+            "Topico nao suportado pelo LoadWorker",
+            extra={"event": "unsupported_topic", "topic": topic},
+        )
         return False
 
     def _persist_bronze_load_batch(self, batch: list) -> bool:
-        """
-        Persist raw records to the bronze MongoDB collection.
-        """
+        """Persist raw records to the bronze MongoDB collection."""
         try:
             result = self.loader.persist_bronze(batch)
-            if result["errors"]:
-                print(
-                    f"[AVISO] Bronze parcial - MongoDB: {result['inserted']} "
-                    f"(erros: {result['errors']})"
-                )
-            else:
-                print(f"[OK] {result['inserted']} registros salvos na camada bronze")
-
+            logger.info(
+                "Lote bronze persistido",
+                extra={
+                    "event": "bronze_batch_persisted",
+                    "batch_size": len(batch),
+                    "mongodb_inserted": result["inserted"],
+                    "mongodb_errors": result["errors"],
+                    "success": result["errors"] == 0,
+                },
+            )
             return result["errors"] == 0
 
-        except Exception as exc:
-            print(f"[ERRO] Erro ao persistir lote bronze: {exc}")
+        except Exception:
+            logger.error("Erro ao persistir lote bronze", extra={"event": "error"}, exc_info=True)
             return False
 
     def _persist_silver_load_batch(self, batch: list) -> bool:
-        """
-        Persist transformed records to SQLite and the silver MongoDB collection.
-        Returns success status and logs detailed results.
-        """
+        """Persist transformed records to SQLite and the silver MongoDB collection."""
         try:
             result = self.loader.batch_persist(batch)
 
             sqlite_res = result["sqlite"]
             mongodb_res = result["mongodb"]
-            total = result["total_records"]
 
-            sqlite_total = sqlite_res["inserted"] + sqlite_res["updated"]
-            mongodb_total = mongodb_res["inserted"]
-
-            if result["success"]:
-                if sqlite_total != mongodb_total:
-                    print(
-                        f"[OK] {sqlite_total} em SQLite3 "
-                        f"(ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']}) | "
-                        f"{mongodb_total} em MongoDB | Total: {total}"
-                    )
-                else:
-                    print(
-                        f"[OK] {total} licitacoes salvas em SQLite3 e MongoDB "
-                        f"(ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']})"
-                    )
-            else:
-                print(
-                    f"[AVISO] Parcial - SQLite3: {sqlite_total} "
-                    f"(erros: {sqlite_res['errors']}) | MongoDB: {mongodb_total} "
-                    f"(erros: {mongodb_res['errors']})"
-                )
+            logger.info(
+                "Lote silver persistido",
+                extra={
+                    "event": "silver_batch_persisted",
+                    "batch_size": result["total_records"],
+                    "sqlite_inserted": sqlite_res["inserted"],
+                    "sqlite_updated": sqlite_res["updated"],
+                    "sqlite_errors": sqlite_res["errors"],
+                    "mongodb_inserted": mongodb_res["inserted"],
+                    "mongodb_errors": mongodb_res["errors"],
+                    "success": result["success"],
+                },
+            )
 
             return result["success"]
 
-        except Exception as exc:
-            print(f"[ERRO] Erro ao persistir lote: {exc}")
+        except Exception:
+            logger.error("Erro ao persistir lote silver", extra={"event": "error"}, exc_info=True)
             return False
 
 
@@ -199,6 +236,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    configure_logging(component="load")
 
     worker = LoadWorker()
     worker.run(
