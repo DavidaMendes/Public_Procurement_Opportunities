@@ -1,8 +1,14 @@
-import requests
-from app.infrastructure.settings import PNCP_BASE_URL
-from app.infrastructure.exceptions import NonRetryableAPIError
-from typing import Dict, Generator, Any
 import time
+from typing import Any, Dict, Generator
+
+import requests
+
+from app.infrastructure.exceptions import NonRetryableAPIError
+from app.infrastructure.logging_config import get_logger
+from app.infrastructure.settings import PNCP_BASE_URL
+
+logger = get_logger("extract")
+
 
 class Extract():
     def __init__(self, timeout: int = 30, max_retries: int = 3):
@@ -15,7 +21,7 @@ class Extract():
             response = requests.get(
                 PNCP_BASE_URL,
                 params=params,
-                timeout=self.timeout
+                timeout=self.timeout,
             )
 
             if response.status_code == 422:
@@ -35,7 +41,6 @@ class Extract():
         Yields individual records from each page.
         """
         current_page = int(params.get('pagina', 1))
-        page_size = int(params.get('tamanhoPagina', 50))
         pages_fetched = 0
 
         while True:
@@ -51,20 +56,33 @@ class Extract():
                 if not data:
                     break
 
+                logger.debug(
+                    "Página obtida da API PNCP",
+                    extra={"event": "page_fetched", "page": current_page, "record_count": len(data)},
+                )
+
                 for record in data:
                     yield {
                         'extracted_at': params.get('extracted_at'),
                         'pagina': current_page,
-                        'payload': record
+                        'payload': record,
                     }
 
                 pages_fetched += 1
                 current_page += 1
-                time.sleep(0.5)  
+                time.sleep(0.5)
 
             except NonRetryableAPIError:
+                logger.warning(
+                    "Extração interrompida por erro non-retryable",
+                    extra={"event": "extract_stopped", "page": current_page},
+                    exc_info=True,
+                )
                 break
-            except Exception as e:
-                print(f"Erro na página {current_page}: {str(e)}")
+            except Exception:
+                logger.error(
+                    "Erro ao extrair página",
+                    extra={"event": "error", "page": current_page},
+                    exc_info=True,
+                )
                 break
-

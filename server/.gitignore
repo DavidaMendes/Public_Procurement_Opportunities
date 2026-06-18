@@ -180,4 +180,7 @@ pyrightconfig.json
 # Data folders
 /data
 
+# Local pipeline logs
+logs/
+
 # End of https://www.toptal.com/developers/gitignore/api/python

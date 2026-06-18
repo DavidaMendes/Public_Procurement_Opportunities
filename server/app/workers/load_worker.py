@@ -1,11 +1,15 @@
 import argparse
 import json
+import time
 from typing import Optional
 
 from confluent_kafka import Consumer
 
 from app.etl.load import Load
 from app.infrastructure.config import KAFKA_TOPICS, LOAD_CONSUMER_CONFIG
+from app.infrastructure.logging_config import configure_logging, get_logger
+
+logger = get_logger("load")
 
 
 class LoadWorker:
@@ -14,7 +18,10 @@ class LoadWorker:
         self.loader = Load()
 
         self.consumer.subscribe([KAFKA_TOPICS["transformed_licitacoes"]])
-        print(f"[OK] Inscrito no topico: {KAFKA_TOPICS['transformed_licitacoes']}")
+        logger.info(
+            "Inscrito no tópico de entrada",
+            extra={"event": "subscribed", "topic": KAFKA_TOPICS["transformed_licitacoes"]},
+        )
 
     def run(
         self,
@@ -23,20 +30,16 @@ class LoadWorker:
         max_idle_polls: Optional[int] = None,
         max_messages: Optional[int] = None,
     ):
-        """
-        Consume transformed data and persist to SQLite/MongoDB.
-
-        max_idle_polls is useful for orchestrated runs: after upstream workers stop
-        producing messages, this worker exits once Kafka stays idle.
-        """
+        """Consume transformed data and persist to SQLite/MongoDB."""
         processed_count = 0
         error_count = 0
         idle_polls = 0
         batch = []
+        started = time.monotonic()
+
+        logger.info("Carga iniciada", extra={"event": "stage_start", "batch_size": batch_size})
 
         try:
-            print("[*] Aguardando mensagens...")
-
             while True:
                 msg = self.consumer.poll(timeout=timeout_ms / 1000)
 
@@ -52,7 +55,10 @@ class LoadWorker:
                         batch = []
 
                     if max_idle_polls and idle_polls >= max_idle_polls:
-                        print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
+                        logger.info(
+                            "Encerrando por ociosidade",
+                            extra={"event": "idle_shutdown", "idle_polls": idle_polls},
+                        )
                         break
                     continue
 
@@ -60,7 +66,10 @@ class LoadWorker:
 
                 if msg.error():
                     if msg.error().code() != -191:  # _PARTITION_EOF
-                        print(f"Erro Kafka: {msg.error()}")
+                        logger.warning(
+                            "Erro reportado pelo Kafka",
+                            extra={"event": "kafka_error", "reason": str(msg.error())},
+                        )
                     continue
 
                 try:
@@ -76,28 +85,38 @@ class LoadWorker:
                             error_count += len(batch)
                         batch = []
 
-                        print(f"[OK] {processed_count} registros persistidos (erros: {error_count})")
-
                     if max_messages and processed_count >= max_messages:
-                        print(f"[*] Limite de {max_messages} mensagens persistidas atingido.")
+                        logger.info(
+                            "Limite de mensagens atingido",
+                            extra={"event": "max_messages_reached", "count": processed_count},
+                        )
                         break
 
-                except Exception as exc:
+                except Exception:
                     error_count += 1
-                    print(f"[ERRO] Erro ao processar registro: {exc}")
+                    logger.error("Erro ao processar registro", extra={"event": "error"}, exc_info=True)
 
         except KeyboardInterrupt:
-            print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
+            logger.info(
+                "Carga interrompida manualmente",
+                extra={"event": "interrupted", "count": processed_count, "error_count": error_count},
+            )
         finally:
             if batch:
                 self._persist_batch(batch)
             self.consumer.close()
+            logger.info(
+                "Carga finalizada",
+                extra={
+                    "event": "stage_end",
+                    "count": processed_count,
+                    "error_count": error_count,
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                },
+            )
 
     def _persist_batch(self, batch: list) -> bool:
-        """
-        Persist batch of records to both SQLite and MongoDB.
-        Returns success status and logs detailed results.
-        """
+        """Persist a batch to SQLite and MongoDB; log structured results."""
         try:
             result = self.loader.batch_persist(batch)
 
@@ -105,32 +124,24 @@ class LoadWorker:
             mongodb_res = result["mongodb"]
             total = result["total_records"]
 
-            sqlite_total = sqlite_res["inserted"] + sqlite_res["updated"]
-            mongodb_total = mongodb_res["inserted"]
-
-            if result["success"]:
-                if sqlite_total != mongodb_total:
-                    print(
-                        f"[OK] {sqlite_total} em SQLite3 "
-                        f"(ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']}) | "
-                        f"{mongodb_total} em MongoDB | Total: {total}"
-                    )
-                else:
-                    print(
-                        f"[OK] {total} licitacoes salvas em SQLite3 e MongoDB "
-                        f"(ins: {sqlite_res['inserted']}, upd: {sqlite_res['updated']})"
-                    )
-            else:
-                print(
-                    f"[AVISO] Parcial - SQLite3: {sqlite_total} "
-                    f"(erros: {sqlite_res['errors']}) | MongoDB: {mongodb_total} "
-                    f"(erros: {mongodb_res['errors']})"
-                )
+            logger.info(
+                "Lote persistido",
+                extra={
+                    "event": "batch_persisted",
+                    "batch_size": total,
+                    "sqlite_inserted": sqlite_res["inserted"],
+                    "sqlite_updated": sqlite_res["updated"],
+                    "sqlite_errors": sqlite_res["errors"],
+                    "mongodb_inserted": mongodb_res["inserted"],
+                    "mongodb_errors": mongodb_res["errors"],
+                    "success": result["success"],
+                },
+            )
 
             return result["success"]
 
-        except Exception as exc:
-            print(f"[ERRO] Erro ao persistir lote: {exc}")
+        except Exception:
+            logger.error("Erro ao persistir lote", extra={"event": "error"}, exc_info=True)
             return False
 
 
@@ -152,6 +163,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    configure_logging(component="load")
 
     worker = LoadWorker()
     worker.run(

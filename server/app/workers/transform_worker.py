@@ -1,6 +1,7 @@
 """Transform Worker - Kafka Consumer/Producer for data normalization."""
 import argparse
 import json
+import time
 from typing import Optional
 
 from confluent_kafka import Consumer, Producer
@@ -11,12 +12,22 @@ from app.infrastructure.config import (
     PRODUCER_CONFIG,
     TRANSFORM_CONSUMER_CONFIG,
 )
+from app.infrastructure.logging_config import configure_logging, get_logger
+
+logger = get_logger("transform")
 
 
 def delivery_report(err, msg):
     """Delivery report callback."""
     if err is not None:
-        print(f"Erro na entrega: {err}")
+        logger.error(
+            "Falha na entrega da mensagem ao Kafka",
+            extra={
+                "event": "delivery_failed",
+                "topic": msg.topic() if msg is not None else None,
+                "reason": str(err),
+            },
+        )
 
 
 class TransformWorker:
@@ -26,7 +37,10 @@ class TransformWorker:
         self.transformer = Transform()
 
         self.consumer.subscribe([KAFKA_TOPICS["raw_licitacoes"]])
-        print(f"[OK] Inscrito no topico: {KAFKA_TOPICS['raw_licitacoes']}")
+        logger.info(
+            "Inscrito no tópico de entrada",
+            extra={"event": "subscribed", "topic": KAFKA_TOPICS["raw_licitacoes"]},
+        )
 
     def run(
         self,
@@ -34,34 +48,36 @@ class TransformWorker:
         max_idle_polls: Optional[int] = None,
         max_messages: Optional[int] = None,
     ):
-        """
-        Consume from raw.licitacoes, transform, and produce to transformed.licitacoes.
-
-        max_idle_polls is useful for orchestrated runs: after the ExtractWorker finishes,
-        the consumer exits once Kafka stays idle for the configured number of polls.
-        """
+        """Consume raw.licitacoes, transform, produce transformed.licitacoes."""
         processed_count = 0
         error_count = 0
         idle_polls = 0
+        started = time.monotonic()
+
+        logger.info("Transformação iniciada", extra={"event": "stage_start"})
 
         try:
-            print("[*] Aguardando mensagens...")
-
             while True:
                 msg = self.consumer.poll(timeout=timeout_ms / 1000)
 
                 if msg is None:
                     idle_polls += 1
                     if max_idle_polls and idle_polls >= max_idle_polls:
-                        print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
+                        logger.info(
+                            "Encerrando por ociosidade",
+                            extra={"event": "idle_shutdown", "idle_polls": idle_polls},
+                        )
                         break
                     continue
 
                 idle_polls = 0
 
                 if msg.error():
-                    if msg.error().code() != -191:  
-                        print(f"Erro Kafka: {msg.error()}")
+                    if msg.error().code() != -191:  # _PARTITION_EOF
+                        logger.warning(
+                            "Erro reportado pelo Kafka",
+                            extra={"event": "kafka_error", "reason": str(msg.error())},
+                        )
                     continue
 
                 try:
@@ -69,23 +85,34 @@ class TransformWorker:
                     transformed = self.transformer.transform_record(record)
 
                     message = json.dumps(transformed, ensure_ascii=False, default=str)
+                    key = transformed.get("numero_controle_pncp", "")
 
                     self.producer.produce(
                         topic=KAFKA_TOPICS["transformed_licitacoes"],
                         value=message.encode("utf-8"),
-                        key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
+                        key=key.encode("utf-8"),
                         callback=delivery_report,
                     )
 
                     self.consumer.commit(asynchronous=True)
                     processed_count += 1
+                    logger.debug(
+                        "Registro transformado",
+                        extra={"event": "record_transformed", "key": key, "processed_count": processed_count},
+                    )
 
                     if processed_count % 10 == 0:
                         self.producer.flush(timeout=5)
-                        print(f"[OK] {processed_count} registros transformados")
+                        logger.info(
+                            "Progresso de transformação",
+                            extra={"event": "transform_progress", "count": processed_count},
+                        )
 
                     if max_messages and processed_count >= max_messages:
-                        print(f"[*] Limite de {max_messages} mensagens transformadas atingido.")
+                        logger.info(
+                            "Limite de mensagens atingido",
+                            extra={"event": "max_messages_reached", "count": processed_count},
+                        )
                         break
 
                 except Exception as exc:
@@ -104,13 +131,32 @@ class TransformWorker:
 
                     self.consumer.commit(asynchronous=True)
                     error_count += 1
-                    print(f"[ERRO] Erro ao transformar registro: {exc}")
+                    logger.warning(
+                        "Registro enviado para a DLQ",
+                        extra={
+                            "event": "dlq_sent",
+                            "dlq_topic": KAFKA_TOPICS["transformed_licitacoes_dlq"],
+                            "reason": str(exc),
+                        },
+                    )
 
         except KeyboardInterrupt:
-            print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
+            logger.info(
+                "Transformação interrompida manualmente",
+                extra={"event": "interrupted", "count": processed_count, "error_count": error_count},
+            )
         finally:
             self.producer.flush(timeout=10)
             self.consumer.close()
+            logger.info(
+                "Transformação finalizada",
+                extra={
+                    "event": "stage_end",
+                    "count": processed_count,
+                    "error_count": error_count,
+                    "duration_ms": round((time.monotonic() - started) * 1000),
+                },
+            )
 
 
 if __name__ == "__main__":
@@ -130,6 +176,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    configure_logging(component="transform")
 
     worker = TransformWorker()
     worker.run(

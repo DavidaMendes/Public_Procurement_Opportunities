@@ -276,6 +276,43 @@ cd infrastructure/kafka && docker compose down -v && cd ../..
 
 ---
 
+## 📝 Logs do Pipeline
+
+O pipeline grava logs estruturados em **JSON Lines** localmente (um objeto JSON por linha), além de uma saída legível no console.
+
+**Arquivos** (diretório configurável via `LOG_DIR`, padrão `./logs/`):
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `extract.log` | Eventos do estágio de extração |
+| `transform.log` | Eventos do estágio de transformação |
+| `load.log` | Eventos do estágio de carga |
+| `pipeline.log` | Visão agregada de todos os estágios |
+
+Cada linha contém `ts`, `level`, `component`, `run_id`, `event`, `message` e campos contextuais (ex.: `topic`, `partition`, `offset`, `count`, `sqlite_inserted`). Erros incluem `error.{type,message,stack}`. O `run_id` correlaciona todos os estágios de uma mesma execução — o orquestrador gera e propaga via a variável de ambiente `PPO_RUN_ID`.
+
+**Configuração via ambiente:**
+
+```
+LOG_DIR=./logs          # diretório dos arquivos de log
+LOG_LEVEL=INFO          # nível mínimo
+LOG_MAX_BYTES=10485760  # rotação por tamanho (10 MB)
+LOG_BACKUP_COUNT=5      # nº de backups rotacionados
+LOG_TO_CONSOLE=true     # liga/desliga saída no console
+```
+
+**Consultas rápidas com `jq`:**
+
+```bash
+# Erros de qualquer estágio numa execução
+grep '"level":"ERROR"' logs/pipeline.log | jq 'select(.run_id=="<run_id>")'
+
+# Quantos registros foram persistidos por lote
+jq 'select(.event=="batch_persisted") | .sqlite_inserted' logs/load.log
+```
+
+---
+
 ## 📋 Requisitos
 
 - Python 3.8+

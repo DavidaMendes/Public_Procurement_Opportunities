@@ -78,3 +78,9 @@ LOAD_CONSUMER_CONFIG = {
     'group.id': KAFKA_CONSUMER_GROUPS['load'],
     'client.id': 'load-consumer',
 }
+
+LOG_DIR = os.getenv("LOG_DIR", "./logs")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024)))
+LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "5"))
+LOG_TO_CONSOLE = os.getenv("LOG_TO_CONSOLE", "true").lower() in ("1", "true", "yes")

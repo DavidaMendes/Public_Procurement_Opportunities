@@ -1,7 +1,11 @@
-from app.infrastructure.database import client, get_sqlite_connection
-from typing import Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List
 import sqlite3
+
+from app.infrastructure.database import client, get_sqlite_connection
+from app.infrastructure.logging_config import get_logger
+
+logger = get_logger("load")
 
 
 class Load():
@@ -104,12 +108,22 @@ class Load():
                         inserted += 1
 
                 except sqlite3.Error:
+                    logger.warning(
+                        "Falha ao gravar registro no SQLite",
+                        extra={"event": "sqlite_record_error", "key": record.get('numero_controle_pncp')},
+                        exc_info=True,
+                    )
                     errors += 1
 
             conn.commit()
             conn.close()
 
         except sqlite3.Error:
+            logger.error(
+                "Falha de conexão/transação no SQLite",
+                extra={"event": "error"},
+                exc_info=True,
+            )
             return {'inserted': inserted, 'updated': updated, 'errors': len(records)}
 
         return {'inserted': inserted, 'updated': updated, 'errors': errors}
@@ -128,6 +142,11 @@ class Load():
             result = collection.insert_many(records)
             return {'inserted': len(result.inserted_ids), 'errors': 0}
         except Exception:
+            logger.error(
+                "Falha ao gravar lote no MongoDB",
+                extra={"event": "error"},
+                exc_info=True,
+            )
             return {'inserted': 0, 'errors': len(records)}
 
     def batch_persist(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
