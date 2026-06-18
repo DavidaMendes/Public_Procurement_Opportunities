@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.ppoclient.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,6 +42,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "apiBaseUrl": "https://api-pncp-sfs5.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "fc50d134-1887-4579-b1a0-dd3498a5f46f"
+      }
     }
   }
 }

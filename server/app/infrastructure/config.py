@@ -4,10 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ============================================================================
-# PNCP API Configuration
-# ============================================================================
-
 PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
 
 RECIFE_PROCUREMENT = {
@@ -19,27 +15,29 @@ RECIFE_PROCUREMENT = {
     "tamanhoPagina": "50",
 }
 
-# ============================================================================
-# Database Configuration
-# ============================================================================
-
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "./data/licitacoes.db")
 DATABASE_URI = os.getenv("DATABASE_URI")
-MONGODB_DB_NAME = "procurement"
-MONGODB_COLLECTION_NAME = "licitacoes"
-
-# ============================================================================
-# Kafka Configuration
-# ============================================================================
+MONGODB_DB_NAME = os.getenv("DATABASE_NAME", "procurement")
+MONGODB_COLLECTION_NAME = os.getenv("COLLECTION_NAME", "licitacoes")
+MONGODB_BRONZE_COLLECTION_NAME = os.getenv("COLLECTION_BRONZE_NAME", "bronze_licitacoes")
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 # Topics
 KAFKA_TOPICS = {
-    'raw_licitacoes': 'raw.licitacoes',
-    'transformed_licitacoes': 'transformed.licitacoes',
-    'raw_licitacoes_dlq': 'raw.licitacoes.dlq',
-    'transformed_licitacoes_dlq': 'transformed.licitacoes.dlq',
+    'load_bronze_licitacoes': 'load.bronze.licitacoes',
+    'transform_licitacoes': 'transform.licitacoes',
+    'load_silver_licitacoes': 'load.silver.licitacoes',
+    'load_bronze_licitacoes_dlq': 'load.bronze.licitacoes.dlq',
+    'transform_licitacoes_dlq': 'transform.licitacoes.dlq',
+    'load_silver_licitacoes_dlq': 'load.silver.licitacoes.dlq',
+    # Backward-compatible aliases.
+    'bronze_licitacoes': 'load.bronze.licitacoes',
+    'raw_licitacoes': 'transform.licitacoes',
+    'transformed_licitacoes': 'load.silver.licitacoes',
+    'bronze_licitacoes_dlq': 'load.bronze.licitacoes.dlq',
+    'raw_licitacoes_dlq': 'transform.licitacoes.dlq',
+    'transformed_licitacoes_dlq': 'load.silver.licitacoes.dlq',
 }
 
 # Consumer Groups

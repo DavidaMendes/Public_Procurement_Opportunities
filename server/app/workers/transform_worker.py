@@ -18,7 +18,7 @@ logger = get_logger("transform")
 
 
 def delivery_report(err, msg):
-    """Delivery report callback."""
+    """Kafka delivery callback."""
     if err is not None:
         logger.error(
             "Falha na entrega da mensagem ao Kafka",
@@ -28,6 +28,17 @@ def delivery_report(err, msg):
                 "reason": str(err),
             },
         )
+        return
+
+    logger.debug(
+        "Mensagem entregue ao Kafka",
+        extra={
+            "event": "delivered",
+            "topic": msg.topic(),
+            "partition": msg.partition(),
+            "offset": msg.offset(),
+        },
+    )
 
 
 class TransformWorker:
@@ -36,10 +47,39 @@ class TransformWorker:
         self.producer = Producer(PRODUCER_CONFIG)
         self.transformer = Transform()
 
-        self.consumer.subscribe([KAFKA_TOPICS["raw_licitacoes"]])
+        self.transform_input_topic = KAFKA_TOPICS["transform_licitacoes"]
+        self.silver_load_topic = KAFKA_TOPICS["load_silver_licitacoes"]
+        self.silver_load_dlq_topic = KAFKA_TOPICS["load_silver_licitacoes_dlq"]
+
+        self.consumer.subscribe([self.transform_input_topic])
         logger.info(
-            "Inscrito no tópico de entrada",
-            extra={"event": "subscribed", "topic": KAFKA_TOPICS["raw_licitacoes"]},
+            "Inscrito no topico de entrada",
+            extra={"event": "subscribed", "topic": self.transform_input_topic},
+        )
+
+    def _publish_transformed_record_to_silver_load_topic(self, transformed: dict):
+        message = json.dumps(transformed, ensure_ascii=False, default=str)
+
+        self.producer.produce(
+            topic=self.silver_load_topic,
+            value=message.encode("utf-8"),
+            key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
+            callback=delivery_report,
+        )
+        self.producer.poll(0)
+
+    def _publish_transform_error_to_dlq(self, msg, exc: Exception):
+        error_record = {
+            "error": str(exc),
+            "original_message": msg.value().decode("utf-8", errors="ignore"),
+            "timestamp": str(msg.timestamp()),
+        }
+        error_message = json.dumps(error_record, ensure_ascii=False, default=str)
+
+        self.producer.produce(
+            topic=self.silver_load_dlq_topic,
+            value=error_message.encode("utf-8"),
+            callback=delivery_report,
         )
 
     def run(
@@ -48,13 +88,20 @@ class TransformWorker:
         max_idle_polls: Optional[int] = None,
         max_messages: Optional[int] = None,
     ):
-        """Consume raw.licitacoes, transform, produce transformed.licitacoes."""
+        """Consume extracted records, transform them, and publish to the silver-load topic."""
         processed_count = 0
         error_count = 0
         idle_polls = 0
         started = time.monotonic()
 
-        logger.info("Transformação iniciada", extra={"event": "stage_start"})
+        logger.info(
+            "Transformacao iniciada",
+            extra={
+                "event": "stage_start",
+                "input_topic": self.transform_input_topic,
+                "output_topic": self.silver_load_topic,
+            },
+        )
 
         try:
             while True:
@@ -83,28 +130,25 @@ class TransformWorker:
                 try:
                     record = json.loads(msg.value().decode("utf-8"))
                     transformed = self.transformer.transform_record(record)
+                    self._publish_transformed_record_to_silver_load_topic(transformed)
 
-                    message = json.dumps(transformed, ensure_ascii=False, default=str)
                     key = transformed.get("numero_controle_pncp", "")
-
-                    self.producer.produce(
-                        topic=KAFKA_TOPICS["transformed_licitacoes"],
-                        value=message.encode("utf-8"),
-                        key=key.encode("utf-8"),
-                        callback=delivery_report,
-                    )
-
                     self.consumer.commit(asynchronous=True)
                     processed_count += 1
+
                     logger.debug(
                         "Registro transformado",
-                        extra={"event": "record_transformed", "key": key, "processed_count": processed_count},
+                        extra={
+                            "event": "record_transformed",
+                            "key": key,
+                            "processed_count": processed_count,
+                        },
                     )
 
                     if processed_count % 10 == 0:
                         self.producer.flush(timeout=5)
                         logger.info(
-                            "Progresso de transformação",
+                            "Progresso de transformacao",
                             extra={"event": "transform_progress", "count": processed_count},
                         )
 
@@ -116,40 +160,28 @@ class TransformWorker:
                         break
 
                 except Exception as exc:
-                    error_record = {
-                        "error": str(exc),
-                        "original_message": msg.value().decode("utf-8", errors="ignore"),
-                        "timestamp": str(msg.timestamp()),
-                    }
-                    error_message = json.dumps(error_record, ensure_ascii=False, default=str)
-
-                    self.producer.produce(
-                        topic=KAFKA_TOPICS["transformed_licitacoes_dlq"],
-                        value=error_message.encode("utf-8"),
-                        callback=delivery_report,
-                    )
-
+                    self._publish_transform_error_to_dlq(msg, exc)
                     self.consumer.commit(asynchronous=True)
                     error_count += 1
                     logger.warning(
                         "Registro enviado para a DLQ",
                         extra={
                             "event": "dlq_sent",
-                            "dlq_topic": KAFKA_TOPICS["transformed_licitacoes_dlq"],
+                            "dlq_topic": self.silver_load_dlq_topic,
                             "reason": str(exc),
                         },
                     )
 
         except KeyboardInterrupt:
             logger.info(
-                "Transformação interrompida manualmente",
+                "Transformacao interrompida manualmente",
                 extra={"event": "interrupted", "count": processed_count, "error_count": error_count},
             )
         finally:
             self.producer.flush(timeout=10)
             self.consumer.close()
             logger.info(
-                "Transformação finalizada",
+                "Transformacao finalizada",
                 extra={
                     "event": "stage_end",
                     "count": processed_count,

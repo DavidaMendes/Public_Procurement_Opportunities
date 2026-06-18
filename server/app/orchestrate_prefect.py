@@ -13,6 +13,7 @@ from app.etl.extract import Extract
 from app.etl.load import Load
 from app.etl.transform import Transform
 from app.infrastructure.config import (
+    MONGODB_BRONZE_COLLECTION_NAME,
     MONGODB_COLLECTION_NAME,
     MONGODB_DB_NAME,
     RECIFE_PROCUREMENT,
@@ -201,6 +202,34 @@ def transform_procurements(records: List[Dict[str, Any]]) -> List[Dict[str, Any]
     return transformed_records
 
 
+@task(name="Load bronze procurements")
+def load_bronze_procurements(
+    records: List[Dict[str, Any]],
+    mongodb_db: str,
+    mongodb_bronze_collection: str,
+) -> Dict[str, Any]:
+    logger = get_run_logger()
+
+    if not records:
+        logger.info("Nenhum registro bruto para carregar na camada bronze.")
+        return {"inserted": 0, "errors": 0}
+
+    logger.info(
+        "Iniciando carga bronze de %s registros em MongoDB %s.%s.",
+        len(records),
+        mongodb_db,
+        mongodb_bronze_collection,
+    )
+
+    result = Load(
+        mongodb_db=mongodb_db,
+        mongodb_bronze_collection=mongodb_bronze_collection,
+    ).persist_bronze(records)
+
+    logger.info("Carga bronze finalizada: %s", result)
+    return result
+
+
 @task(name="Load procurements")
 def load_procurements(
     records: List[Dict[str, Any]],
@@ -240,6 +269,7 @@ def procurement_etl_flow(
     max_pages: Optional[int] = None,
     mongodb_db: str = MONGODB_DB_NAME,
     mongodb_collection: str = MONGODB_COLLECTION_NAME,
+    mongodb_bronze_collection: str = MONGODB_BRONZE_COLLECTION_NAME,
 ) -> Dict[str, Any]:
     logger = get_run_logger()
     file_logger = _ensure_run_logging()
@@ -250,6 +280,11 @@ def procurement_etl_flow(
 
     initialize_database()
     extracted_records = extract_procurements(resolved_params, max_pages=max_pages)
+    bronze_load_result = load_bronze_procurements(
+        extracted_records,
+        mongodb_db,
+        mongodb_bronze_collection,
+    )
     transformed_records = transform_procurements(extracted_records)
     load_result = load_procurements(
         transformed_records,
@@ -260,6 +295,7 @@ def procurement_etl_flow(
     result = {
         "extracted_count": len(extracted_records),
         "transformed_count": len(transformed_records),
+        "bronze_load": bronze_load_result,
         "load": load_result,
     }
 

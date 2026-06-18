@@ -11,7 +11,7 @@ logger = get_logger("extract")
 
 
 class Extract():
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
+    def __init__(self, timeout: int = 60, max_retries: int = 3):
         self.timeout = timeout
         self.max_retries = max_retries
 
@@ -28,7 +28,15 @@ class Extract():
                 raise NonRetryableAPIError(f"Erro 422 - parâmetros inválidos: {response.text}")
 
             response.raise_for_status()
-            return response.json()
+            try:
+                return response.json()
+            except requests.exceptions.JSONDecodeError:
+                content_type = response.headers.get("content-type", "")
+                body_preview = response.text[:300].replace("\n", " ").replace("\r", " ")
+                raise NonRetryableAPIError(
+                    "Resposta da API PNCP nao veio em JSON "
+                    f"(status={response.status_code}, content_type={content_type}, body={body_preview!r})"
+                ) from None
 
         except requests.exceptions.ReadTimeout as err:
             raise err
@@ -72,11 +80,10 @@ class Extract():
                 current_page += 1
                 time.sleep(0.5)
 
-            except NonRetryableAPIError:
+            except NonRetryableAPIError as exc:
                 logger.warning(
                     "Extração interrompida por erro non-retryable",
-                    extra={"event": "extract_stopped", "page": current_page},
-                    exc_info=True,
+                    extra={"event": "extract_stopped", "page": current_page, "reason": str(exc)},
                 )
                 break
             except Exception:
