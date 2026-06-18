@@ -5,7 +5,7 @@ from typing import Dict, Generator, Any
 import time
 
 class Extract():
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
+    def __init__(self, timeout: int = 60, max_retries: int = 3):
         self.timeout = timeout
         self.max_retries = max_retries
 

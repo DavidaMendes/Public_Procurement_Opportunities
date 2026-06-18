@@ -2,6 +2,7 @@ import argparse
 from typing import Any, Dict, List, Optional
 
 from app.infrastructure.config import (
+    MONGODB_BRONZE_COLLECTION_NAME,
     MONGODB_COLLECTION_NAME,
     MONGODB_DB_NAME,
     RECIFE_PROCUREMENT,
@@ -78,7 +79,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--mongodbCollection",
         default=MONGODB_COLLECTION_NAME,
-        help="Nome da collection MongoDB usada na carga.",
+        help="Nome da collection MongoDB silver usada na carga.",
+    )
+    parser.add_argument(
+        "--mongodbBronzeCollection",
+        default=MONGODB_BRONZE_COLLECTION_NAME,
+        help="Nome da collection MongoDB bronze usada na carga bruta.",
     )
     parser.add_argument(
         "--timeout",
@@ -133,6 +139,7 @@ def main(argv: Optional[List[str]] = None) -> Dict[str, Any]:
         max_pages=args.max_pages,
         mongodb_db=args.mongodbDb,
         mongodb_collection=args.mongodbCollection,
+        mongodb_bronze_collection=args.mongodbBronzeCollection,
     )
 
 

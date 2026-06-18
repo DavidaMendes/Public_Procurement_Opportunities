@@ -25,8 +25,21 @@ class TransformWorker:
         self.producer = Producer(PRODUCER_CONFIG)
         self.transformer = Transform()
 
-        self.consumer.subscribe([KAFKA_TOPICS["raw_licitacoes"]])
-        print(f"[OK] Inscrito no topico: {KAFKA_TOPICS['raw_licitacoes']}")
+        self.transform_input_topic = KAFKA_TOPICS["transform_licitacoes"]
+        self.silver_load_topic = KAFKA_TOPICS["load_silver_licitacoes"]
+
+        self.consumer.subscribe([self.transform_input_topic])
+        print(f"[OK] Inscrito no topico: {self.transform_input_topic}")
+
+    def _publish_transformed_record_to_silver_load_topic(self, transformed: dict):
+        message = json.dumps(transformed, ensure_ascii=False, default=str)
+
+        self.producer.produce(
+            topic=self.silver_load_topic,
+            value=message.encode("utf-8"),
+            key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
+            callback=delivery_report,
+        )
 
     def run(
         self,
@@ -35,7 +48,7 @@ class TransformWorker:
         max_messages: Optional[int] = None,
     ):
         """
-        Consume from raw.licitacoes, transform, and produce to transformed.licitacoes.
+        Consume extracted data, transform it, and publish to the silver-load topic.
 
         max_idle_polls is useful for orchestrated runs: after the ExtractWorker finishes,
         the consumer exits once Kafka stays idle for the configured number of polls.
@@ -67,15 +80,7 @@ class TransformWorker:
                 try:
                     record = json.loads(msg.value().decode("utf-8"))
                     transformed = self.transformer.transform_record(record)
-
-                    message = json.dumps(transformed, ensure_ascii=False, default=str)
-
-                    self.producer.produce(
-                        topic=KAFKA_TOPICS["transformed_licitacoes"],
-                        value=message.encode("utf-8"),
-                        key=transformed.get("numero_controle_pncp", "").encode("utf-8"),
-                        callback=delivery_report,
-                    )
+                    self._publish_transformed_record_to_silver_load_topic(transformed)
 
                     self.consumer.commit(asynchronous=True)
                     processed_count += 1
@@ -97,7 +102,7 @@ class TransformWorker:
                     error_message = json.dumps(error_record, ensure_ascii=False, default=str)
 
                     self.producer.produce(
-                        topic=KAFKA_TOPICS["transformed_licitacoes_dlq"],
+                        topic=KAFKA_TOPICS["load_silver_licitacoes_dlq"],
                         value=error_message.encode("utf-8"),
                         callback=delivery_report,
                     )

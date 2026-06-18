@@ -13,8 +13,10 @@ class LoadWorker:
         self.consumer = Consumer(LOAD_CONSUMER_CONFIG)
         self.loader = Load()
 
-        self.consumer.subscribe([KAFKA_TOPICS["transformed_licitacoes"]])
-        print(f"[OK] Inscrito no topico: {KAFKA_TOPICS['transformed_licitacoes']}")
+        self.bronze_load_topic = KAFKA_TOPICS["load_bronze_licitacoes"]
+        self.silver_load_topic = KAFKA_TOPICS["load_silver_licitacoes"]
+        self.consumer.subscribe([self.bronze_load_topic, self.silver_load_topic])
+        print(f"[OK] Inscrito nos topicos: {self.bronze_load_topic}, {self.silver_load_topic}")
 
     def run(
         self,
@@ -24,7 +26,7 @@ class LoadWorker:
         max_messages: Optional[int] = None,
     ):
         """
-        Consume transformed data and persist to SQLite/MongoDB.
+        Consume bronze and transformed data and persist to MongoDB/SQLite.
 
         max_idle_polls is useful for orchestrated runs: after upstream workers stop
         producing messages, this worker exits once Kafka stays idle.
@@ -32,7 +34,10 @@ class LoadWorker:
         processed_count = 0
         error_count = 0
         idle_polls = 0
-        batch = []
+        batches = {
+            self.bronze_load_topic: [],
+            self.silver_load_topic: [],
+        }
 
         try:
             print("[*] Aguardando mensagens...")
@@ -42,14 +47,16 @@ class LoadWorker:
 
                 if msg is None:
                     idle_polls += 1
-                    if batch:
-                        success = self._persist_batch(batch)
-                        if success:
-                            self.consumer.commit(asynchronous=True)
-                            processed_count += len(batch)
-                        else:
-                            error_count += len(batch)
-                        batch = []
+                    for topic, batch in batches.items():
+                        if batch:
+                            success = self._persist_load_topic_batch(topic, batch)
+                            if success:
+                                for kafka_msg, _ in batch:
+                                    self.consumer.commit(message=kafka_msg, asynchronous=True)
+                                processed_count += len(batch)
+                            else:
+                                error_count += len(batch)
+                            batches[topic] = []
 
                     if max_idle_polls and idle_polls >= max_idle_polls:
                         print(f"[*] Encerrando por ociosidade apos {idle_polls} polls sem mensagens.")
@@ -65,16 +72,22 @@ class LoadWorker:
 
                 try:
                     record = json.loads(msg.value().decode("utf-8"))
-                    batch.append(record)
+                    topic = msg.topic()
 
-                    if len(batch) >= batch_size:
-                        success = self._persist_batch(batch)
+                    if topic not in batches:
+                        raise ValueError(f"Topico nao suportado pelo LoadWorker: {topic}")
+
+                    batches[topic].append((msg, record))
+
+                    if len(batches[topic]) >= batch_size:
+                        success = self._persist_load_topic_batch(topic, batches[topic])
                         if success:
-                            self.consumer.commit(asynchronous=True)
-                            processed_count += len(batch)
+                            for kafka_msg, _ in batches[topic]:
+                                self.consumer.commit(message=kafka_msg, asynchronous=True)
+                            processed_count += len(batches[topic])
                         else:
-                            error_count += len(batch)
-                        batch = []
+                            error_count += len(batches[topic])
+                        batches[topic] = []
 
                         print(f"[OK] {processed_count} registros persistidos (erros: {error_count})")
 
@@ -89,13 +102,47 @@ class LoadWorker:
         except KeyboardInterrupt:
             print(f"\n[*] Parado. Processados: {processed_count}, Erros: {error_count}")
         finally:
-            if batch:
-                self._persist_batch(batch)
+            for topic, batch in batches.items():
+                if batch and self._persist_load_topic_batch(topic, batch):
+                    for kafka_msg, _ in batch:
+                        self.consumer.commit(message=kafka_msg, asynchronous=True)
             self.consumer.close()
 
-    def _persist_batch(self, batch: list) -> bool:
+    def _persist_load_topic_batch(self, topic: str, batch: list) -> bool:
+        records = [record for _, record in batch]
+
+        if topic == self.bronze_load_topic:
+            return self._persist_bronze_load_batch(records)
+
+        if topic == self.silver_load_topic:
+            return self._persist_silver_load_batch(records)
+
+        print(f"[ERRO] Topico nao suportado pelo LoadWorker: {topic}")
+        return False
+
+    def _persist_bronze_load_batch(self, batch: list) -> bool:
         """
-        Persist batch of records to both SQLite and MongoDB.
+        Persist raw records to the bronze MongoDB collection.
+        """
+        try:
+            result = self.loader.persist_bronze(batch)
+            if result["errors"]:
+                print(
+                    f"[AVISO] Bronze parcial - MongoDB: {result['inserted']} "
+                    f"(erros: {result['errors']})"
+                )
+            else:
+                print(f"[OK] {result['inserted']} registros salvos na camada bronze")
+
+            return result["errors"] == 0
+
+        except Exception as exc:
+            print(f"[ERRO] Erro ao persistir lote bronze: {exc}")
+            return False
+
+    def _persist_silver_load_batch(self, batch: list) -> bool:
+        """
+        Persist transformed records to SQLite and the silver MongoDB collection.
         Returns success status and logs detailed results.
         """
         try:
